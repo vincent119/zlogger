@@ -295,23 +295,6 @@ func Sync() error {
 	return nil
 }
 
-// cleanFields 處理字段中的特殊字符
-func cleanFields(fields []Field) []Field {
-	cleanedFields := make([]Field, len(fields))
-	for i, field := range fields {
-		cleanedFields[i] = field
-
-		if field.Type == zapcore.StringType {
-			if field.Key == "sql" {
-				cleanedFields[i].String = processSQLString(field.String)
-			} else {
-				cleanedFields[i].String = strings.ReplaceAll(field.String, "\\\\", "\\")
-			}
-		}
-	}
-	return cleanedFields
-}
-
 // processSQLString 處理 SQL 字串中的轉義字符
 func processSQLString(sql string) string {
 	sql = strings.ReplaceAll(sql, "\\\\", "\\")

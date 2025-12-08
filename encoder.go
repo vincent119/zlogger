@@ -10,8 +10,8 @@ func NewNoEscapeJSONEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
 	return zapcore.NewJSONEncoder(cfg)
 }
 
-// DisableHtmlEscaping 為 logger 添加 hook（保留擴展用）
-func DisableHtmlEscaping(log *zap.Logger) *zap.Logger {
+// DisableHTMLEscaping 為 logger 添加 hook（保留擴展用）
+func DisableHTMLEscaping(log *zap.Logger) *zap.Logger {
 	return log.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
 		return nil
 	}))
