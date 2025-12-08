@@ -8,10 +8,6 @@ type Config struct {
 	Outputs       []string `json:"outputs" yaml:"outputs" toml:"outputs"`                      // 輸出目標: console, file
 	LogPath       string   `json:"log_path" yaml:"log_path" toml:"log_path"`                   // 日誌檔案路徑
 	FileName      string   `json:"file_name" yaml:"file_name" toml:"file_name"`                // 日誌檔案名稱
-	MaxSize       int      `json:"max_size" yaml:"max_size" toml:"max_size"`                   // 單個日誌檔案最大大小（MB）
-	MaxAge        int      `json:"max_age" yaml:"max_age" toml:"max_age"`                      // 日誌檔案保存天數
-	MaxBackups    int      `json:"max_backups" yaml:"max_backups" toml:"max_backups"`          // 最大備份數
-	Compress      bool     `json:"compress" yaml:"compress" toml:"compress"`                   // 是否壓縮舊日誌
 	AddCaller     bool     `json:"add_caller" yaml:"add_caller" toml:"add_caller"`             // 是否添加調用者信息
 	AddStacktrace bool     `json:"add_stacktrace" yaml:"add_stacktrace" toml:"add_stacktrace"` // 是否添加堆疊追蹤
 	Development   bool     `json:"development" yaml:"development" toml:"development"`          // 是否為開發模式
@@ -24,10 +20,6 @@ func DefaultConfig() *Config {
 		Format:        "console",
 		Outputs:       []string{"console"},
 		LogPath:       "./logs",
-		MaxSize:       100,
-		MaxAge:        30,
-		MaxBackups:    10,
-		Compress:      true,
 		AddCaller:     true,
 		AddStacktrace: false,
 		Development:   false,
@@ -55,17 +47,7 @@ func (c *Config) Merge(other *Config) *Config {
 	if other.FileName != "" {
 		c.FileName = other.FileName
 	}
-	if other.MaxSize > 0 {
-		c.MaxSize = other.MaxSize
-	}
-	if other.MaxAge > 0 {
-		c.MaxAge = other.MaxAge
-	}
-	if other.MaxBackups > 0 {
-		c.MaxBackups = other.MaxBackups
-	}
 	// bool 類型直接覆蓋
-	c.Compress = other.Compress
 	c.AddCaller = other.AddCaller
 	c.AddStacktrace = other.AddStacktrace
 	c.Development = other.Development

@@ -1,3 +1,31 @@
+// Package zlogger - split_output.go
+//
+// 此檔案提供按日誌級別分離輸出的功能。
+//
+// 功能說明：
+//   - 將 INFO、WARN、ERROR 級別的日誌分別寫入不同檔案
+//   - 每天零點自動切換到新日期的檔案
+//   - 線程安全，支援併發寫入
+//
+// 注意事項：
+//   - 此功能是「按級別分離」，不是「log rotation」
+//   - 如需大小限制、壓縮備份等功能，請搭配 timberjack 使用
+//   - 詳細說明請參考 README.md 的「Log Rotation」章節
+//
+// 使用範例：
+//
+//	core, cleanup, err := zlogger.GetSplitCore("./logs", "app", encoderConfig)
+//	if err != nil {
+//	    panic(err)
+//	}
+//	defer cleanup()
+//
+// 輸出檔案：
+//
+//	logs/
+//	├── app-info-2024-01-01.log
+//	├── app-warn-2024-01-01.log
+//	└── app-error-2024-01-01.log
 package zlogger
 
 import (
@@ -13,6 +41,12 @@ import (
 )
 
 // SplitOutput 將不同級別的日誌寫入不同的檔案
+//
+// 功能：
+//   - INFO 級別 → {prefix}-info-{date}.log
+//   - WARN 級別 → {prefix}-warn-{date}.log
+//   - ERROR/DPANIC/PANIC/FATAL 級別 → {prefix}-error-{date}.log
+//   - DEBUG 級別 → 歸類到 info 檔案
 type SplitOutput struct {
 	directory  string
 	filePrefix string
@@ -160,6 +194,18 @@ func (w *splitOutputWrapper) Sync() error {
 }
 
 // GetSplitCore 創建按級別分離的日誌核心
+//
+// 參數：
+//   - directory: 日誌檔案目錄
+//   - filePrefix: 檔案名稱前綴
+//   - encoderConfig: zap 編碼器配置
+//
+// 返回：
+//   - zapcore.Core: 可用於 zap.New() 的核心
+//   - func(): 清理函數，程式結束時調用以關閉檔案
+//   - error: 錯誤信息
+//
+// 注意：此功能不包含 log rotation（大小限制/壓縮），如需請搭配 timberjack
 func GetSplitCore(directory, filePrefix string, encoderConfig zapcore.EncoderConfig) (zapcore.Core, func(), error) {
 	splitOut, err := NewSplitOutput(directory, filePrefix)
 	if err != nil {

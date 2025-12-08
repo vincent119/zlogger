@@ -1,3 +1,15 @@
 {
-  "cSpell.words": ["multierr", "Syncer", "zapcore", "zlogger"]
+  "cSpell.words": [
+    "DPANIC",
+    "gopkg",
+    "multierr",
+    "natefinch",
+    "nolint",
+    "Ruina",
+    "Syncer",
+    "timberjack",
+    "zapcore",
+    "zlogger",
+    "zstd"
+  ]
 }

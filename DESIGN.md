@@ -243,7 +243,7 @@ zlogger.Info("執行 SQL", zlogger.String("sql", "SELECT * FROM users"))
 
 ### 7.1 SplitOutput 結構
 
-**設計目的：** 將不同級別的日誌寫入不同檔案
+**設計目的：** 將不同級別的日誌寫入不同檔案（按級別分離，非 log rotation）
 
 ```bash
 logs/
@@ -262,20 +262,69 @@ logs/
    })
    ```
 
-2. **自動輪轉**
+2. **每日自動換檔**
 
-   - 每天零點自動切換檔案
+   - 每天零點自動切換到新檔案
    - 使用 goroutine 定期檢查
+   - 注意：這是按日期換檔，不是按大小的 rotation
 
 3. **線程安全**
    - 使用 `sync.Mutex` 保護檔案操作
    - 確保併發安全
 
+### 7.2 與 timberjack 的差異
+
+| 功能 | split_output.go | timberjack |
+|------|-----------------|------------|
+| 按級別分離 | ✅ info/warn/error 分開檔案 | ❌ 單一檔案 |
+| 每日換檔 | ✅ 每天零點切換 | ✅ RotateAt 支援 |
+| 大小限制 | ❌ 無 | ✅ MaxSize |
+| 時間間隔 | ❌ 無 | ✅ RotationInterval |
+| 備份數量 | ❌ 無 | ✅ MaxBackups |
+| 保存天數 | ❌ 無 | ✅ MaxAge |
+| 壓縮備份 | ❌ 無 | ✅ gzip/zstd |
+
+**使用建議：**
+
+- 需要按級別分離 → 使用 `GetSplitCore()`
+- 需要大小限制/壓縮/時間輪轉 → 使用 timberjack
+- 兩者可結合使用
+
 ---
 
-## 8. 錯誤處理設計
+## 8. Log Rotation 設計
 
-### 8.1 初始化錯誤
+### 8.1 設計決策
+
+**zlogger 不內建 log rotation**，理由如下：
+
+1. **保持 lib 輕量** - 只依賴 zap
+2. **避免強制依賴** - 不是所有專案都需要
+3. **使用者自由選擇** - 可選 timberjack、系統 logrotate 等
+
+### 8.2 建議方案
+
+使用 [timberjack](https://github.com/DeRuina/timberjack)：
+
+```go
+import "github.com/DeRuina/timberjack"
+
+tjLogger := &timberjack.Logger{
+    Filename:   "./logs/app.log",
+    MaxSize:    100,   // MB
+    MaxBackups: 10,
+    MaxAge:     30,    // days
+    Compress:   true,  // gzip 壓縮
+}
+```
+
+詳細範例請參考 README.md。
+
+---
+
+## 9. 錯誤處理設計
+
+### 9.1 初始化錯誤
 
 ```go
 if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -291,7 +340,7 @@ if err := os.MkdirAll(logDir, 0755); err != nil {
 - 避免程式在沒有日誌的情況下運行
 - 簡化 API（`Init()` 無需返回錯誤）
 
-### 8.2 運行時錯誤
+### 9.2 運行時錯誤
 
 ```go
 func Info(msg string, fields ...Field) {
@@ -311,9 +360,9 @@ func Info(msg string, fields ...Field) {
 
 ---
 
-## 9. 擴展性設計
+## 10. 擴展性設計
 
-### 9.1 類型別名導出
+### 10.1 類型別名導出
 
 ```go
 type (
@@ -329,7 +378,7 @@ type (
 - 提供 `GetLogger()` 返回原始 zap.Logger
 - 不限制使用者的使用方式
 
-### 9.2 選項模式支援
+### 10.2 選項模式支援
 
 ```go
 func WithOptions(opts ...zap.Option) *Logger
@@ -342,42 +391,42 @@ func WithOptions(opts ...zap.Option) *Logger
 
 ---
 
-## 10. 性能考量
+## 11. 性能考量
 
-### 10.1 零分配設計
+### 11.1 零分配設計
 
 - Field 函數直接轉發到 zap，無額外分配
 - Context 字段合併使用 `make()` 預分配容量
 - 避免不必要的字串操作
 
-### 10.2 延遲初始化
+### 11.2 延遲初始化
 
 - 使用 `sync.Once` 確保只初始化一次
 - 全局 logger 使用指針，避免複製開銷
 
 ---
 
-## 11. 設計原則總結
+## 12. 設計原則總結
 
-### 11.1 簡潔性
+### 12.1 簡潔性
 
 - **單一 Package**：所有功能在 `zlogger` 下
 - **統一命名**：函數名稱清晰一致
 - **零配置可用**：`Init(nil)` 即可使用
 
-### 11.2 靈活性
+### 12.2 靈活性
 
 - **多格式配置**：支援 JSON/YAML/TOML
 - **多輸出支援**：console + file
 - **動態調整**：運行時修改級別
 
-### 11.3 易用性
+### 12.3 易用性
 
 - **Context 自動合併**：無需手動處理
 - **Field 輔助函數**：簡化常用操作
 - **類型別名**：與 zap 完全相容
 
-### 11.4 可擴展性
+### 12.4 可擴展性
 
 - **GetLogger()**：提供原始 zap.Logger
 - **WithOptions()**：支援自定義選項
@@ -385,7 +434,7 @@ func WithOptions(opts ...zap.Option) *Logger
 
 ---
 
-## 12. 與原生 zap 的差異
+## 13. 與原生 zap 的差異
 
 | 特性     | zap          | zlogger                     |
 | -------- | ------------ | --------------------------- |
