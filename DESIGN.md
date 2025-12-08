@@ -6,7 +6,7 @@
 
 **設計理念：** 將所有功能整合在單一 `zlogger` package 中，避免使用者需要 import 多個子 package。
 
-```
+```bash
 zlogger/
 ├── config.go      # 配置結構
 ├── core.go        # 核心初始化與日誌函數
@@ -104,7 +104,7 @@ var (
 
 ### 3.2 初始化流程
 
-```
+```bash
 Init(cfg)
   └─> once.Do(initLogger)
       ├─> DefaultConfig().Merge(cfg)  # 合併配置
@@ -221,7 +221,7 @@ type sqlProcessingCore struct {
 
 **處理流程：**
 
-```
+```bash
 Write() 被調用
   └─> 檢查 field.Key == "sql"
       └─> processSQLString() 處理轉義字符
@@ -245,7 +245,7 @@ zlogger.Info("執行 SQL", zlogger.String("sql", "SELECT * FROM users"))
 
 **設計目的：** 將不同級別的日誌寫入不同檔案
 
-```
+```bash
 logs/
 ├── app-info-2024-01-01.log
 ├── app-warn-2024-01-01.log
