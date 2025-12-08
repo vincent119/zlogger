@@ -54,10 +54,6 @@ log:
     - file
   log_path: ./logs
   file_name: app.log
-  max_size: 100
-  max_age: 30
-  max_backups: 10
-  compress: true
   add_caller: true
   add_stacktrace: false
   development: false
@@ -345,6 +341,91 @@ defer cleanup()
 // - logs/app-error-2024-01-01.log
 ```
 
+## Log Rotation（使用 timberjack）
+
+zlogger 本身不包含 log rotation 功能，建議使用 [timberjack](https://github.com/DeRuina/timberjack) 處理：
+
+```bash
+go get github.com/DeRuina/timberjack
+```
+
+```go
+package main
+
+import (
+    "github.com/DeRuina/timberjack"
+    "go.uber.org/zap"
+    "go.uber.org/zap/zapcore"
+    "github.com/vincent119/zlogger"
+)
+
+func main() {
+    // 設定 timberjack 日誌輪轉
+    tjLogger := &timberjack.Logger{
+        Filename:   "./logs/app.log",
+        MaxSize:    100,   // 單檔最大大小（MB）
+        MaxBackups: 10,    // 最大備份數
+        MaxAge:     30,    // 保存天數
+        Compress:   true,  // 是否壓縮舊日誌（gzip）
+    }
+
+    // 建立編碼器配置
+    encoderConfig := zapcore.EncoderConfig{
+        TimeKey:        "ts",
+        LevelKey:       "level",
+        NameKey:        "logger",
+        CallerKey:      "caller",
+        MessageKey:     "msg",
+        StacktraceKey:  "stacktrace",
+        LineEnding:     zapcore.DefaultLineEnding,
+        EncodeLevel:    zapcore.CapitalLevelEncoder,
+        EncodeTime:     zapcore.ISO8601TimeEncoder,
+        EncodeDuration: zapcore.StringDurationEncoder,
+        EncodeCaller:   zapcore.ShortCallerEncoder,
+    }
+
+    // 建立核心
+    core := zapcore.NewCore(
+        zapcore.NewJSONEncoder(encoderConfig),
+        zapcore.AddSync(tjLogger),
+        zap.InfoLevel,
+    )
+
+    // 建立 logger
+    logger := zap.New(core, zap.AddCaller())
+    zap.ReplaceGlobals(logger)
+
+    // 現在可以使用 zlogger 的函數（如果需要）
+    // 或直接使用 zap.L()
+    logger.Info("伺服器啟動", zap.String("port", "8080"))
+}
+```
+
+### 搭配 zlogger 使用
+
+如果想同時輸出到 console 和帶有 rotation 的檔案：
+
+```go
+// Console 輸出
+consoleCore := zapcore.NewCore(
+    zapcore.NewConsoleEncoder(encoderConfig),
+    zapcore.Lock(os.Stdout),
+    zap.DebugLevel,
+)
+
+// File 輸出（帶 rotation）
+fileCore := zapcore.NewCore(
+    zapcore.NewJSONEncoder(encoderConfig),
+    zapcore.AddSync(tjLogger),
+    zap.InfoLevel,
+)
+
+// 合併輸出
+core := zapcore.NewTee(consoleCore, fileCore)
+logger := zap.New(core, zap.AddCaller())
+zap.ReplaceGlobals(logger)
+```
+
 ## 配置選項說明
 
 | 選項             | 類型     | 預設值        | 說明                                      |
@@ -354,13 +435,11 @@ defer cleanup()
 | `outputs`        | []string | `["console"]` | 輸出目標：console, file                   |
 | `log_path`       | string   | `"./logs"`    | 日誌檔案目錄                              |
 | `file_name`      | string   | `""`          | 日誌檔案名稱（空則使用日期）              |
-| `max_size`       | int      | `100`         | 單檔最大大小（MB）                        |
-| `max_age`        | int      | `30`          | 保存天數                                  |
-| `max_backups`    | int      | `10`          | 最大備份數                                |
-| `compress`       | bool     | `true`        | 是否壓縮舊日誌                            |
 | `add_caller`     | bool     | `true`        | 是否顯示調用位置                          |
 | `add_stacktrace` | bool     | `false`       | 是否顯示堆疊追蹤                          |
 | `development`    | bool     | `false`       | 開發模式                                  |
+
+> **Note:** Log rotation（檔案大小限制、備份、壓縮）請使用 timberjack，參考上方範例。
 
 ## License
 

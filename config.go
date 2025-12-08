@@ -26,7 +26,12 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Merge 將傳入的配置合併到預設配置（零值不覆蓋）
+// Merge 將傳入的配置合併到預設配置
+//
+// 合併規則：
+//   - string: 空字串不覆蓋
+//   - slice: nil/空切片不覆蓋
+//   - bool: 直接覆蓋（無法區分「未設置」和「設置為 false」）
 func (c *Config) Merge(other *Config) *Config {
 	if other == nil {
 		return c

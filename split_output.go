@@ -240,4 +240,3 @@ func GetSplitCore(directory, filePrefix string, encoderConfig zapcore.EncoderCon
 
 	return core, func() { splitOut.Close() }, nil
 }
-
