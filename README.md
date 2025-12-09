@@ -238,19 +238,19 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*To
 package middleware
 
 import (
-	"time"
+    "time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/vincent119/zlogger"
+    "github.com/gin-gonic/gin"
+    "github.com/google/uuid"
+    "github.com/vincent119/zlogger"
 )
 
 // Context key 常數
 const (
-	LogCategoryKey = "log_category"
-	LogFunctionKey = "log_function"
-	LogSkipKey     = "log_skip"   // 用於跳過中間件 log
-	LogFieldsKey   = "log_fields" // 用於存放自定義欄位
+    LogCategoryKey = "log_category"
+    LogFunctionKey = "log_function"
+    LogSkipKey     = "log_skip"   // 用於跳過中間件 log
+    LogFieldsKey   = "log_fields" // 用於存放自定義欄位
 )
 
 // Zfn 定義 context 欄位函數型別
@@ -268,26 +268,26 @@ type Zconfig struct {
 
 // SetLogCategory 設定 log category（供 handler 使用）
 func SetLogCategory(c *gin.Context, category string) {
-	c.Set(LogCategoryKey, category)
+    c.Set(LogCategoryKey, category)
 }
 
 // SetLogFunction 設定 log function（供 handler 使用）
 func SetLogFunction(c *gin.Context, function string) {
-	c.Set(LogFunctionKey, function)
+    c.Set(LogFunctionKey, function)
 }
 
 // SkipMiddlewareLog 跳過中間件的 log（handler 已自行記錄時使用）
 func SkipMiddlewareLog(c *gin.Context) {
-	c.Set(LogSkipKey, true)
+    c.Set(LogSkipKey, true)
 }
 
 // SetLogFields 設定多個自定義欄位（供 handler 使用）
 // 用法: middleware.SetLogFields(c, zlogger.String("key", "value"), zlogger.Int("count", 1))
 func SetLogFields(c *gin.Context, fields ...zlogger.Field) {
-	if existing, exists := c.Get(LogFieldsKey); exists {
-		fields = append(existing.([]zlogger.Field), fields...)
-	}
-	c.Set(LogFieldsKey, fields)
+    if existing, exists := c.Get(LogFieldsKey); exists {
+        fields = append(existing.([]zlogger.Field), fields...)
+    }
+    c.Set(LogFieldsKey, fields)
 }
 
 func Logger() gin.HandlerFunc {
@@ -327,50 +327,50 @@ func LoggerWithConfig(conf *Zconfig) gin.HandlerFunc {
 
         c.Next()
 
-		// 檢查是否跳過中間件 log
-		if skip, exists := c.Get(LogSkipKey); exists && skip.(bool) {
-			return
-		}
+        // 檢查是否跳過中間件 log
+        if skip, exists := c.Get(LogSkipKey); exists && skip.(bool) {
+            return
+        }
 
-		latency := time.Since(start)
+        latency := time.Since(start)
 
-		// 優先使用 handler 設定的 category，否則使用預設值
-		logCategory := category
-		if handlerCategory, exists := c.Get(LogCategoryKey); exists {
-			logCategory = handlerCategory.(string)
-		}
+        // 優先使用 handler 設定的 category，否則使用預設值
+        logCategory := category
+        if handlerCategory, exists := c.Get(LogCategoryKey); exists {
+            logCategory = handlerCategory.(string)
+        }
 
-		fields := []zlogger.Field{
-			zlogger.String("method", c.Request.Method),
-			zlogger.String("path", path),
-			zlogger.String("query", c.Request.URL.RawQuery),
-			zlogger.String("ip", c.ClientIP()),
-			zlogger.Int("status", c.Writer.Status()),
-			zlogger.Duration("latency", latency),
-			zlogger.String("user-agent", c.Request.UserAgent()),
-			zlogger.String("category", logCategory),
-		}
+        fields := []zlogger.Field{
+            zlogger.String("method", c.Request.Method),
+            zlogger.String("path", path),
+            zlogger.String("query", c.Request.URL.RawQuery),
+            zlogger.String("ip", c.ClientIP()),
+            zlogger.Int("status", c.Writer.Status()),
+            zlogger.Duration("latency", latency),
+            zlogger.String("user-agent", c.Request.UserAgent()),
+            zlogger.String("category", logCategory),
+        }
 
-		// 如果 handler 設定了 function，加入 fields
-		if function, exists := c.Get(LogFunctionKey); exists {
-			fields = append(fields, zlogger.String("function", function.(string)))
-		}
+        // 如果 handler 設定了 function，加入 fields
+        if function, exists := c.Get(LogFunctionKey); exists {
+            fields = append(fields, zlogger.String("function", function.(string)))
+        }
 
-		// 加入 handler 設定的自定義欄位
-		if customFields, exists := c.Get(LogFieldsKey); exists {
-			fields = append(fields, customFields.([]zlogger.Field)...)
-		}
+        // 加入 handler 設定的自定義欄位
+        if customFields, exists := c.Get(LogFieldsKey); exists {
+            fields = append(fields, customFields.([]zlogger.Field)...)
+        }
 
-		if conf.Context != nil {
-			fields = append(fields, conf.Context(c)...)
-		}
+        if conf.Context != nil {
+            fields = append(fields, conf.Context(c)...)
+        }
 
-		if len(c.Errors) > 0 {
-			fields = append(fields, zlogger.String("error", c.Errors.String()))
-			zlogger.ErrorContext(ctx, "HTTP Request Error", fields...)
-		} else {
-			zlogger.InfoContext(ctx, "HTTP Request", fields...)
-		}
+        if len(c.Errors) > 0 {
+            fields = append(fields, zlogger.String("error", c.Errors.String()))
+            zlogger.ErrorContext(ctx, "HTTP Request Error", fields...)
+        } else {
+            zlogger.InfoContext(ctx, "HTTP Request", fields...)
+        }
     }
 }
 
@@ -398,9 +398,12 @@ type H58body struct {
 }
 
 func NumberCheck(c *gin.Context) {
-    // 方式一：使用專用 API 設定 category 和 function（推薦）
-    middleware.SetLogCategory(c, "nuage")
-    middleware.SetLogFunction(c, "CallBack")
+    // 方式一：使用 SetLogFields 傳入任意欄位
+    middleware.SetLogFields(c,
+        zlogger.String("category", "nuage"),
+        zlogger.String("function", "CallBack"),
+        zlogger.String("data", "11111"),
+    )
 
     // 方式二：使用 SetLogFields 傳入其他自定義欄位
     middleware.SetLogFields(c, zlogger.String("user_id", "12345"))
