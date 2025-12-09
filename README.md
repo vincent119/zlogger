@@ -376,7 +376,7 @@ func LoggerWithConfig(conf *Zconfig) gin.HandlerFunc {
 
 ```
 
-使用方式：
+### 使用方式
 
 ```go
 // Package test is the route for the test api
