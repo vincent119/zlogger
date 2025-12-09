@@ -410,6 +410,13 @@ func NumberCheck(c *gin.Context) {
     // 可多次呼叫，欄位會累加
     middleware.SetLogFields(c, zlogger.Int("retry_count", 3))
 
+    // 方式三：直接使用 zlogger 的 Context 函數記錄日誌
+    zlogger.InfoContext(c.Request.Context(), "NumberCheck",
+    zlogger.String("category", "clicksend"),
+    zlogger.String("function", "bounce"),
+    zlogger.String("data", "11111"),
+    )
+    middleware.skipMiddlewareLog(c) // 跳過中間件日誌
 
     c.JSON(200, gin.H{
         "Status": "OK", "recv_time": fmt.Sprint(time.Now().Format("2006-01-02T15:04:05")),
