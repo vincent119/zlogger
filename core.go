@@ -76,7 +76,14 @@ func initLogger(cfg *Config) {
 	logLevel := parseLevel(globalConfig.Level)
 	zapGlobalLevel.SetLevel(logLevel)
 
-	// 配置編碼器
+	// 配置編碼器 - 根據設定決定是否使用顏色
+	var levelEncoder zapcore.LevelEncoder
+	if globalConfig.ColorEnabled {
+		levelEncoder = zapcore.CapitalColorLevelEncoder // 帶顏色
+	} else {
+		levelEncoder = zapcore.CapitalLevelEncoder // 不帶顏色
+	}
+
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "ts",
 		LevelKey:       "level",
@@ -86,7 +93,7 @@ func initLogger(cfg *Config) {
 		MessageKey:     "msg",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,
+		EncodeLevel:    levelEncoder,
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.StringDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,

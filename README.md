@@ -57,6 +57,7 @@ log:
   add_caller: true
   add_stacktrace: false
   development: false
+  color_enabled: true
 ```
 
 ```go
@@ -79,7 +80,8 @@ zlogger.Init(&appConfig.Log)
     "format": "json",
     "outputs": ["console"],
     "log_path": "./logs",
-    "add_caller": true
+    "add_caller": true,
+    "color_enabled": true
   }
 }
 ```
@@ -548,6 +550,28 @@ zap.ReplaceGlobals(logger)
 | `add_caller`     | bool     | `true`        | 是否顯示調用位置                          |
 | `add_stacktrace` | bool     | `false`       | 是否顯示堆疊追蹤                          |
 | `development`    | bool     | `false`       | 開發模式                                  |
+| `color_enabled`  | bool     | `true`        | 是否啟用顏色輸出（僅 console 格式有效）   |
+
+### 顏色輸出
+
+當 `color_enabled` 為 `true` 且 `format` 為 `console` 時，不同日誌級別會以不同顏色顯示：
+
+| 級別        | 顏色   |
+| ----------- | ------ |
+| DEBUG       | 洋紅色 |
+| INFO        | 藍色   |
+| WARN        | 黃色   |
+| ERROR/FATAL | 紅色   |
+
+```go
+// 啟用顏色（預設）
+zlogger.Init(nil)
+
+// 禁用顏色（輸出到檔案或 CI 環境時建議禁用）
+zlogger.Init(&zlogger.Config{
+    ColorEnabled: false,
+})
+```
 
 > **Note:** Log rotation（檔案大小限制、備份、壓縮）請使用 timberjack，參考上方範例。
 

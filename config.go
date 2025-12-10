@@ -11,6 +11,7 @@ type Config struct {
 	AddCaller     bool     `json:"add_caller" yaml:"add_caller" toml:"add_caller"`             // 是否添加調用者信息
 	AddStacktrace bool     `json:"add_stacktrace" yaml:"add_stacktrace" toml:"add_stacktrace"` // 是否添加堆疊追蹤
 	Development   bool     `json:"development" yaml:"development" toml:"development"`          // 是否為開發模式
+	ColorEnabled  bool     `json:"color_enabled" yaml:"color_enabled" toml:"color_enabled"`    // 是否啟用顏色輸出（僅 console 格式有效）
 }
 
 // DefaultConfig 返回預設配置
@@ -23,6 +24,7 @@ func DefaultConfig() *Config {
 		AddCaller:     true,
 		AddStacktrace: false,
 		Development:   false,
+		ColorEnabled:  true,
 	}
 }
 
@@ -56,6 +58,7 @@ func (c *Config) Merge(other *Config) *Config {
 	c.AddCaller = other.AddCaller
 	c.AddStacktrace = other.AddStacktrace
 	c.Development = other.Development
+	c.ColorEnabled = other.ColorEnabled
 
 	return c
 }
