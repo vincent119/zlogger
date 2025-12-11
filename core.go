@@ -97,6 +97,7 @@ func initLogger(cfg *Config) {
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.StringDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
+		ConsoleSeparator: " ",
 	}
 
 	// 定義日誌輸出
