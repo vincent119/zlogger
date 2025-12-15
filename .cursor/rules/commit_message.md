@@ -118,3 +118,7 @@ perf(db): 優化查詢索引以降低延遲
 chore(config): 更新 Docker Compose 預設埠號
 test(auth): 新增 MFA Session 驗證單元測試
 ```
+
+---
+
+本規範適用於 Cursor AI 在本專案生成的所有 commit message。
