@@ -79,7 +79,7 @@ func TestWithRequestID_EmptyString(t *testing.T) {
 	ctx := context.Background()
 	result := WithRequestID(ctx, "")
 
-	// 空字串應該返回原始 context
+	// empty string should return original context
 	fields := FromContext(result)
 	if fields != nil {
 		t.Errorf("WithRequestID with empty string should not add field, got %v", fields)
@@ -199,10 +199,10 @@ func TestContextLogFunctions(t *testing.T) {
 	globalLogger = zap.New(core)
 	globalConfig = DefaultConfig()
 
-	// 創建帶有 request_id 的 context
+	// Create context with request_id
 	ctx := WithRequestID(context.Background(), "req-123")
 
-	// 使用 InfoContext
+	// Use InfoContext
 	InfoContext(ctx, "test message", String("extra", "data"))
 
 	output := buf.String()
@@ -222,12 +222,12 @@ func TestContextLogFunctions_NilLogger(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 當 globalLogger 為 nil 時，不應該 panic
+	// Should not panic when globalLogger is nil
 	DebugContext(ctx, "debug")
 	InfoContext(ctx, "info")
 	WarnContext(ctx, "warn")
 	ErrorContext(ctx, "error")
-	// 不測試 FatalContext，因為它會調用 os.Exit
+	// Do not test FatalContext as it calls os.Exit
 }
 
 func TestMultipleContextFields(t *testing.T) {
@@ -243,7 +243,7 @@ func TestMultipleContextFields(t *testing.T) {
 		t.Errorf("expected 5 fields, got %d", len(fields))
 	}
 
-	// 檢查所有 key 都存在
+	// Check all keys exist
 	keys := make(map[string]bool)
 	for _, f := range fields {
 		keys[f.Key] = true
@@ -308,7 +308,7 @@ func TestContextLogFunctions_AllLevels(t *testing.T) {
 
 	ctx := WithRequestID(context.Background(), "test-req")
 
-	// 測試所有級別
+	// Test all levels
 	DebugContext(ctx, "debug message")
 	InfoContext(ctx, "info message")
 	WarnContext(ctx, "warn message")

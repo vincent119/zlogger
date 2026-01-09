@@ -27,8 +27,8 @@ func TestParseLevel(t *testing.T) {
 		{"ERROR", zap.ErrorLevel},
 		{"fatal", zap.FatalLevel},
 		{"FATAL", zap.FatalLevel},
-		{"unknown", zap.InfoLevel}, // 預設為 info
-		{"", zap.InfoLevel},        // 空字串預設為 info
+		{"unknown", zap.InfoLevel}, // default to info
+		{"", zap.InfoLevel},        // empty string defaults to info
 	}
 
 	for _, tt := range tests {
@@ -62,7 +62,7 @@ func TestProcessSQLString(t *testing.T) {
 	}
 }
 
-// 重置全局狀態以便測試
+// Reset global state for testing
 func resetGlobalState() {
 	globalLogger = nil
 	globalConfig = nil
@@ -72,7 +72,7 @@ func resetGlobalState() {
 func TestInit_WithNilConfig(t *testing.T) {
 	resetGlobalState()
 
-	// 使用自定義 buffer 捕獲輸出
+	// Use custom buffer to capture output
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:     "ts",
@@ -89,7 +89,7 @@ func TestInit_WithNilConfig(t *testing.T) {
 	globalLogger = zap.New(core)
 	globalConfig = DefaultConfig()
 
-	// 測試日誌輸出
+	// Test log output
 	Info("test message", String("key", "value"))
 
 	output := buf.String()
@@ -104,27 +104,27 @@ func TestInit_WithNilConfig(t *testing.T) {
 func TestLogFunctions_NilLogger(t *testing.T) {
 	resetGlobalState()
 
-	// 當 globalLogger 為 nil 時，不應該 panic
+	// Should not panic when globalLogger is nil
 	Debug("debug message")
 	Info("info message")
 	Warn("warn message")
 	Error("error message")
-	// 不測試 Fatal，因為它會調用 os.Exit
+	// Do not test Fatal as it calls os.Exit
 }
 
 func TestSetLevel(t *testing.T) {
 	resetGlobalState()
 
-	// 設置初始級別
+	// Set initial level
 	zapGlobalLevel.SetLevel(zap.InfoLevel)
 
-	// 測試設置為 debug
+	// Test setting to debug
 	zapGlobalLevel.SetLevel(parseLevel("debug"))
 	if zapGlobalLevel.Level() != zap.DebugLevel {
 		t.Errorf("expected DebugLevel, got %v", zapGlobalLevel.Level())
 	}
 
-	// 測試設置為 error
+	// Test setting to error
 	zapGlobalLevel.SetLevel(parseLevel("error"))
 	if zapGlobalLevel.Level() != zap.ErrorLevel {
 		t.Errorf("expected ErrorLevel, got %v", zapGlobalLevel.Level())
@@ -168,7 +168,7 @@ func TestLogWithFields(t *testing.T) {
 	globalLogger = zap.New(core)
 	globalConfig = DefaultConfig()
 
-	// 測試各種 Field 類型
+	// Test various Field types
 	Info("test",
 		String("str", "hello"),
 		Int("int", 42),
@@ -187,7 +187,7 @@ func TestLogWithFields(t *testing.T) {
 	}
 }
 
-// 測試 sqlProcessingCore
+// Test sqlProcessingCore
 func TestSqlProcessingCore_With(t *testing.T) {
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -205,7 +205,7 @@ func TestSqlProcessingCore_With(t *testing.T) {
 
 	sqlCore := &sqlProcessingCore{Core: baseCore}
 
-	// 測試 With 方法
+	// Test With method
 	fields := []zapcore.Field{
 		zap.String("sql", `SELECT * FROM users WHERE name = \"John\"`),
 	}
@@ -232,7 +232,7 @@ func TestSqlProcessingCore_Check(t *testing.T) {
 
 	sqlCore := &sqlProcessingCore{Core: baseCore}
 
-	// 測試 Check 方法
+	// Test Check method
 	entry := zapcore.Entry{
 		Level:   zap.InfoLevel,
 		Message: "test",
@@ -261,7 +261,7 @@ func TestSqlProcessingCore_Write(t *testing.T) {
 
 	sqlCore := &sqlProcessingCore{Core: baseCore}
 
-	// 測試 Write 方法
+	// Test Write method
 	entry := zapcore.Entry{
 		Level:   zap.InfoLevel,
 		Message: "test with \\backslash",
@@ -295,7 +295,7 @@ func TestSetLevel_WithLogger(t *testing.T) {
 	globalLogger = zap.New(core)
 	globalConfig = DefaultConfig()
 
-	// 測試 SetLevel 函式
+	// Test SetLevel function
 	SetLevel("debug")
 	if zapGlobalLevel.Level() != zap.DebugLevel {
 		t.Errorf("expected DebugLevel, got %v", zapGlobalLevel.Level())
@@ -326,7 +326,7 @@ func TestLogAllLevels(t *testing.T) {
 	globalLogger = zap.New(core)
 	globalConfig = DefaultConfig()
 
-	// 測試所有日誌級別
+	// Test all log levels
 	Debug("debug message", String("level", "debug"))
 	Info("info message", String("level", "info"))
 	Warn("warn message", String("level", "warn"))
@@ -347,7 +347,7 @@ func TestLogAllLevels(t *testing.T) {
 	}
 }
 
-// 測試 Init 和 initLogger
+// Test Init and initLogger
 func TestInitLogger_WithConsoleOutput(t *testing.T) {
 	resetGlobalState()
 
@@ -358,7 +358,7 @@ func TestInitLogger_WithConsoleOutput(t *testing.T) {
 		ColorEnabled: false,
 	}
 
-	// 直接呼叫 initLogger（不使用 Init 以避免 sync.Once）
+	// Call initLogger directly (not using Init to avoid sync.Once)
 	initLogger(cfg)
 
 	if globalLogger == nil {
@@ -421,7 +421,7 @@ func TestInitLogger_WithFileOutput(t *testing.T) {
 		t.Error("expected globalLogger to be initialized")
 	}
 
-	// 驗證日誌檔案建立
+	// Verify log file creation
 	files, err := os.ReadDir(tmpDir)
 	if err != nil {
 		t.Fatalf("failed to read log dir: %v", err)
@@ -481,7 +481,7 @@ func TestInitLogger_EmptyOutputs(t *testing.T) {
 	cfg := &Config{
 		Level:   "info",
 		Format:  "console",
-		Outputs: []string{}, // 空輸出，應該使用預設控制台
+		Outputs: []string{}, // empty outputs, should use default console
 	}
 
 	initLogger(cfg)
@@ -494,7 +494,7 @@ func TestInitLogger_EmptyOutputs(t *testing.T) {
 func TestInitLogger_NilConfig(t *testing.T) {
 	resetGlobalState()
 
-	// 傳入 nil，應使用預設配置
+	// Pass nil, should use default config
 	initLogger(nil)
 
 	if globalLogger == nil {
@@ -616,7 +616,7 @@ func TestBuildFileCore_WithFileName(t *testing.T) {
 		t.Error("expected non-nil core")
 	}
 
-	// 驗證自訂檔名
+	// Verify custom filename
 	files, _ := os.ReadDir(tmpDir)
 	found := false
 	for _, f := range files {
@@ -633,15 +633,15 @@ func TestBuildFileCore_WithFileName(t *testing.T) {
 func TestBuildFileCore_EmptyLogPath(t *testing.T) {
 	resetGlobalState()
 
-	// 使用臨時目錄，因為預設會使用 ./logs
+	// Use temp directory since default would use ./logs
 	originalWd, _ := os.Getwd()
 	tmpDir := t.TempDir()
-	os.Chdir(tmpDir)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	globalConfig = &Config{
 		Format:  "json",
-		LogPath: "", // 空路徑，應使用預設 ./logs
+		LogPath: "", // empty path, should use default ./logs
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
@@ -655,6 +655,6 @@ func TestBuildFileCore_EmptyLogPath(t *testing.T) {
 		t.Error("expected non-nil core with default log path")
 	}
 
-	// 清理
-	os.RemoveAll("./logs")
+	// Cleanup
+	_ = os.RemoveAll("./logs")
 }

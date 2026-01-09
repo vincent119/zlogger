@@ -12,24 +12,24 @@ import (
 )
 
 var (
-	// globalLogger 全局日誌實例
+	// globalLogger is the global logger instance
 	globalLogger *zap.Logger
 	once         sync.Once
-	// zapGlobalLevel 全局日誌級別，支援動態修改
+	// zapGlobalLevel is the global log level, supports dynamic modification
 	zapGlobalLevel = zap.NewAtomicLevel()
-	// globalConfig 儲存當前配置
+	// globalConfig stores the current configuration
 	globalConfig *Config
 )
 
-// Field 是 zap.Field 的別名，使用時更簡潔
+// Field is an alias for zap.Field for convenience
 type Field = zap.Field
 
-// sqlProcessingCore 是一個處理 SQL 字段的核心包裝器
+// sqlProcessingCore is a core wrapper that processes SQL fields
 type sqlProcessingCore struct {
 	zapcore.Core
 }
 
-// With 實現 zapcore.Core 接口
+// With implements zapcore.Core interface
 func (c *sqlProcessingCore) With(fields []zapcore.Field) zapcore.Core {
 	for i := range fields {
 		if fields[i].Key == "sql" && fields[i].Type == zapcore.StringType {
@@ -39,15 +39,15 @@ func (c *sqlProcessingCore) With(fields []zapcore.Field) zapcore.Core {
 	return &sqlProcessingCore{Core: c.Core.With(fields)}
 }
 
-// Check 實現 zapcore.Core 接口
+// Check implements zapcore.Core interface
 func (c *sqlProcessingCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
-	if c.Core.Enabled(ent.Level) {
+	if c.Enabled(ent.Level) {
 		return ce.AddCore(ent, c)
 	}
 	return ce
 }
 
-// Write 實現 zapcore.Core 接口
+// Write implements zapcore.Core interface
 func (c *sqlProcessingCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 	ent.Message = strings.ReplaceAll(ent.Message, "\\", "")
 
@@ -60,28 +60,28 @@ func (c *sqlProcessingCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 	return c.Core.Write(ent, fields)
 }
 
-// Init 使用傳入的配置初始化日誌系統
+// Init initializes the logging system with the provided configuration
 func Init(cfg *Config) {
 	once.Do(func() {
 		initLogger(cfg)
 	})
 }
 
-// initLogger 實際初始化邏輯
+// initLogger is the actual initialization logic
 func initLogger(cfg *Config) {
-	// 合併預設配置
+	// Merge with default config
 	globalConfig = DefaultConfig().Merge(cfg)
 
-	// 設置日誌級別
+	// Set log level
 	logLevel := parseLevel(globalConfig.Level)
 	zapGlobalLevel.SetLevel(logLevel)
 
-	// 配置編碼器 - 根據設定決定是否使用顏色
+	// Configure encoder - decide whether to use colors based on settings
 	var levelEncoder zapcore.LevelEncoder
 	if globalConfig.ColorEnabled {
-		levelEncoder = zapcore.CapitalColorLevelEncoder // 帶顏色
+		levelEncoder = zapcore.CapitalColorLevelEncoder // with color
 	} else {
-		levelEncoder = zapcore.CapitalLevelEncoder // 不帶顏色
+		levelEncoder = zapcore.CapitalLevelEncoder // without color
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
@@ -100,10 +100,10 @@ func initLogger(cfg *Config) {
 		ConsoleSeparator: " ",
 	}
 
-	// 定義日誌輸出
+	// Define log outputs
 	var outputs []zapcore.Core
 
-	// 處理輸出目標
+	// Process output targets
 	for _, output := range globalConfig.Outputs {
 		switch strings.ToLower(output) {
 		case "console":
@@ -118,20 +118,20 @@ func initLogger(cfg *Config) {
 		}
 	}
 
-	// 如果沒有指定任何輸出，預設使用控制台輸出
+	// If no outputs specified, default to console output
 	if len(outputs) == 0 {
 		consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
 		consoleOutput := zapcore.Lock(os.Stdout)
 		outputs = append(outputs, zapcore.NewCore(consoleEncoder, consoleOutput, zapGlobalLevel))
 	}
 
-	// 建立核心日誌
+	// Create core logger
 	core := zapcore.NewTee(outputs...)
 
-	// 建立日誌實例
+	// Create logger instance
 	globalLogger = zap.New(core)
 
-	// 添加處理反斜線的 hook
+	// Add hook for processing backslashes
 	globalLogger = globalLogger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
 		return nil
 	}))
@@ -140,7 +140,7 @@ func initLogger(cfg *Config) {
 
 	if globalConfig.AddCaller {
 		options = append(options, zap.AddCaller())
-		// 設置 caller skip 以正確顯示調用位置
+		// Set caller skip to correctly display call location
 		options = append(options, zap.AddCallerSkip(1))
 	}
 
@@ -156,11 +156,11 @@ func initLogger(cfg *Config) {
 		globalLogger = globalLogger.WithOptions(options...)
 	}
 
-	// 替換全局 logger
+	// Replace global logger
 	zap.ReplaceGlobals(globalLogger)
 
-	// 記錄日誌系統初始化信息
-	globalLogger.Info("日誌系統初始化完成",
+	// Log initialization info
+	globalLogger.Info("logger initialized",
 		zap.String("level", globalConfig.Level),
 		zap.String("format", globalConfig.Format),
 		zap.Strings("outputs", globalConfig.Outputs),
@@ -169,7 +169,7 @@ func initLogger(cfg *Config) {
 	)
 }
 
-// buildConsoleCore 建立控制台輸出核心
+// buildConsoleCore builds the console output core
 func buildConsoleCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 	var encoder zapcore.Encoder
 	if strings.ToLower(globalConfig.Format) == "json" {
@@ -185,7 +185,7 @@ func buildConsoleCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 	return zapcore.NewCore(encoder, consoleOutput, zapGlobalLevel)
 }
 
-// buildFileCore 建立檔案輸出核心
+// buildFileCore builds the file output core
 func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 	var encoder zapcore.Encoder
 	if strings.ToLower(globalConfig.Format) == "json" {
@@ -198,16 +198,16 @@ func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	}
 
-	// 確保日誌目錄存在
+	// Ensure log directory exists
 	logDir := globalConfig.LogPath
 	if logDir == "" {
 		logDir = "./logs"
 	}
 	if err := os.MkdirAll(logDir, 0755); err != nil {
-		panic("無法建立日誌目錄: " + err.Error())
+		panic("failed to create log directory: " + err.Error())
 	}
 
-	// 確定檔案名稱
+	// Determine file name
 	var logFileName string
 	if globalConfig.FileName != "" {
 		logFileName = globalConfig.FileName
@@ -216,7 +216,7 @@ func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 		logFileName = now.Format("2006-01-02") + ".log"
 	}
 
-	// 開啟日誌檔案
+	// Open log file
 	logFilePath := filepath.Join(logDir, logFileName)
 	logFile, err := os.OpenFile(
 		logFilePath,
@@ -224,14 +224,14 @@ func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 		0644,
 	)
 	if err != nil {
-		panic("無法開啟日誌檔案: " + err.Error())
+		panic("failed to open log file: " + err.Error())
 	}
 
 	fileOutput := zapcore.Lock(logFile)
 	return zapcore.NewCore(encoder, fileOutput, zapGlobalLevel)
 }
 
-// parseLevel 解析日誌級別字串
+// parseLevel parses the log level string
 func parseLevel(level string) zapcore.Level {
 	switch strings.ToLower(level) {
 	case "debug":
@@ -249,53 +249,53 @@ func parseLevel(level string) zapcore.Level {
 	}
 }
 
-// Debug 記錄調試信息
+// Debug logs a debug message
 func Debug(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Debug(msg, fields...)
 	}
 }
 
-// Info 記錄一般信息
+// Info logs an info message
 func Info(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Info(msg, fields...)
 	}
 }
 
-// Warn 記錄警告信息
+// Warn logs a warning message
 func Warn(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Warn(msg, fields...)
 	}
 }
 
-// Error 記錄錯誤信息
+// Error logs an error message
 func Error(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Error(msg, fields...)
 	}
 }
 
-// Fatal 記錄致命錯誤並退出程式
+// Fatal logs a fatal error and exits the program
 func Fatal(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Fatal(msg, fields...)
 	}
 }
 
-// SetLevel 動態設置日誌級別
+// SetLevel dynamically sets the log level
 func SetLevel(level string) {
 	zapGlobalLevel.SetLevel(parseLevel(level))
-	Info("日誌級別已變更", String("level", level))
+	Info("log level changed", String("level", level))
 }
 
-// GetLogger 返回原始 zap logger
+// GetLogger returns the raw zap logger
 func GetLogger() *zap.Logger {
 	return globalLogger
 }
 
-// Sync 同步日誌緩衝區
+// Sync flushes the log buffer
 func Sync() error {
 	if globalLogger != nil {
 		return globalLogger.Sync()
@@ -303,7 +303,7 @@ func Sync() error {
 	return nil
 }
 
-// processSQLString 處理 SQL 字串中的轉義字符
+// processSQLString processes escape characters in SQL strings
 func processSQLString(sql string) string {
 	sql = strings.ReplaceAll(sql, "\\\\", "\\")
 	sql = strings.ReplaceAll(sql, "\\\"", "\"")

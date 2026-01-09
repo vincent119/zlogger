@@ -32,66 +32,66 @@ func TestIntFields(t *testing.T) {
 		{"Int64", "int64_key"},
 	}
 
-	// 測試 Int
+	// Test Int
 	field := Int("int_key", 42)
 	if field.Key != "int_key" {
 		t.Errorf("Int: expected key 'int_key', got %s", field.Key)
 	}
 
-	// 測試 Int8
+	// Test Int8
 	field8 := Int8("int8_key", 8)
 	if field8.Key != "int8_key" {
 		t.Errorf("Int8: expected key 'int8_key', got %s", field8.Key)
 	}
 
-	// 測試 Int16
+	// Test Int16
 	field16 := Int16("int16_key", 16)
 	if field16.Key != "int16_key" {
 		t.Errorf("Int16: expected key 'int16_key', got %s", field16.Key)
 	}
 
-	// 測試 Int32
+	// Test Int32
 	field32 := Int32("int32_key", 32)
 	if field32.Key != "int32_key" {
 		t.Errorf("Int32: expected key 'int32_key', got %s", field32.Key)
 	}
 
-	// 測試 Int64
+	// Test Int64
 	field64 := Int64("int64_key", 64)
 	if field64.Key != "int64_key" {
 		t.Errorf("Int64: expected key 'int64_key', got %s", field64.Key)
 	}
 
-	// 避免 unused 警告
+	// Avoid unused warning
 	_ = tests
 }
 
 func TestUintFields(t *testing.T) {
-	// 測試 Uint
+	// Test Uint
 	field := Uint("uint_key", 42)
 	if field.Key != "uint_key" {
 		t.Errorf("Uint: expected key 'uint_key', got %s", field.Key)
 	}
 
-	// 測試 Uint8
+	// Test Uint8
 	field8 := Uint8("uint8_key", 8)
 	if field8.Key != "uint8_key" {
 		t.Errorf("Uint8: expected key 'uint8_key', got %s", field8.Key)
 	}
 
-	// 測試 Uint16
+	// Test Uint16
 	field16 := Uint16("uint16_key", 16)
 	if field16.Key != "uint16_key" {
 		t.Errorf("Uint16: expected key 'uint16_key', got %s", field16.Key)
 	}
 
-	// 測試 Uint32
+	// Test Uint32
 	field32 := Uint32("uint32_key", 32)
 	if field32.Key != "uint32_key" {
 		t.Errorf("Uint32: expected key 'uint32_key', got %s", field32.Key)
 	}
 
-	// 測試 Uint64
+	// Test Uint64
 	field64 := Uint64("uint64_key", 64)
 	if field64.Key != "uint64_key" {
 		t.Errorf("Uint64: expected key 'uint64_key', got %s", field64.Key)
@@ -99,13 +99,13 @@ func TestUintFields(t *testing.T) {
 }
 
 func TestFloatFields(t *testing.T) {
-	// 測試 Float32
+	// Test Float32
 	field32 := Float32("float32_key", 3.14)
 	if field32.Key != "float32_key" {
 		t.Errorf("Float32: expected key 'float32_key', got %s", field32.Key)
 	}
 
-	// 測試 Float64
+	// Test Float64
 	field64 := Float64("float64_key", 3.14159)
 	if field64.Key != "float64_key" {
 		t.Errorf("Float64: expected key 'float64_key', got %s", field64.Key)
@@ -178,7 +178,7 @@ func TestByteStringField(t *testing.T) {
 	}
 }
 
-// TestStringerField 測試 Stringer 類型
+// TestStringerField tests Stringer type
 type testStringer struct {
 	value string
 }

@@ -1,18 +1,18 @@
 // Package zlogger - split_output.go
 //
-// 此檔案提供按日誌級別分離輸出的功能。
+// This file provides functionality for splitting log output by level.
 //
-// 功能說明：
-//   - 將 INFO、WARN、ERROR 級別的日誌分別寫入不同檔案
-//   - 每天零點自動切換到新日期的檔案
-//   - 線程安全，支援併發寫入
+// Features:
+//   - Writes INFO, WARN, ERROR level logs to separate files
+//   - Automatically rotates to new date files at midnight
+//   - Thread-safe, supports concurrent writes
 //
-// 注意事項：
-//   - 此功能是「按級別分離」，不是「log rotation」
-//   - 如需大小限制、壓縮備份等功能，請搭配 timberjack 使用
-//   - 詳細說明請參考 README.md 的「Log Rotation」章節
+// Notes:
+//   - This is "split by level", not "log rotation"
+//   - For size limits, compression, etc., use with timberjack
+//   - See README.md "Log Rotation" section for details
 //
-// 使用範例：
+// Example:
 //
 //	core, cleanup, err := zlogger.GetSplitCore("./logs", "app", encoderConfig)
 //	if err != nil {
@@ -20,7 +20,7 @@
 //	}
 //	defer cleanup()
 //
-// 輸出檔案：
+// Output files:
 //
 //	logs/
 //	├── app-info-2024-01-01.log
@@ -40,13 +40,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// SplitOutput 將不同級別的日誌寫入不同的檔案
+// SplitOutput writes different log levels to different files
 //
-// 功能：
-//   - INFO 級別 → {prefix}-info-{date}.log
-//   - WARN 級別 → {prefix}-warn-{date}.log
-//   - ERROR/DPANIC/PANIC/FATAL 級別 → {prefix}-error-{date}.log
-//   - DEBUG 級別 → 歸類到 info 檔案
+// Mapping:
+//   - INFO level → {prefix}-info-{date}.log
+//   - WARN level → {prefix}-warn-{date}.log
+//   - ERROR/DPANIC/PANIC/FATAL level → {prefix}-error-{date}.log
+//   - DEBUG level → goes to info file
 type SplitOutput struct {
 	directory  string
 	filePrefix string
@@ -56,7 +56,7 @@ type SplitOutput struct {
 	mutex      sync.Mutex
 }
 
-// NewSplitOutput 創建分離日誌輸出
+// NewSplitOutput creates a split log output
 func NewSplitOutput(directory, filePrefix string) (*SplitOutput, error) {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return nil, err
@@ -71,13 +71,13 @@ func NewSplitOutput(directory, filePrefix string) (*SplitOutput, error) {
 		return nil, err
 	}
 
-	// 定期切換日誌檔案（每天零點）
+	// Schedule daily log file rotation (at midnight)
 	go so.rotateDaily()
 
 	return so, nil
 }
 
-// openFiles 開啟各級別日誌檔案
+// openFiles opens log files for each level
 func (s *SplitOutput) openFiles() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -86,7 +86,7 @@ func (s *SplitOutput) openFiles() error {
 
 	date := time.Now().Format("2006-01-02")
 
-	// 開啟 INFO 級別日誌檔案
+	// Open INFO level log file
 	infoFile, err := os.OpenFile(
 		filepath.Join(s.directory, s.filePrefix+"-info-"+date+".log"),
 		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
@@ -97,27 +97,27 @@ func (s *SplitOutput) openFiles() error {
 	}
 	s.infoOut = infoFile
 
-	// 開啟 WARN 級別日誌檔案
+	// Open WARN level log file
 	warnFile, err := os.OpenFile(
 		filepath.Join(s.directory, s.filePrefix+"-warn-"+date+".log"),
 		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
 		0644,
 	)
 	if err != nil {
-		infoFile.Close()
+		_ = infoFile.Close()
 		return err
 	}
 	s.warnOut = warnFile
 
-	// 開啟 ERROR 級別日誌檔案
+	// Open ERROR level log file
 	errorFile, err := os.OpenFile(
 		filepath.Join(s.directory, s.filePrefix+"-error-"+date+".log"),
 		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
 		0644,
 	)
 	if err != nil {
-		infoFile.Close()
-		warnFile.Close()
+		_ = infoFile.Close()
+		_ = warnFile.Close()
 		return err
 	}
 	s.errorOut = errorFile
@@ -125,20 +125,20 @@ func (s *SplitOutput) openFiles() error {
 	return nil
 }
 
-// closeFiles 關閉所有檔案
+// closeFiles closes all files
 func (s *SplitOutput) closeFiles() {
 	if closer, ok := s.infoOut.(io.Closer); ok && closer != nil {
-		closer.Close()
+		_ = closer.Close()
 	}
 	if closer, ok := s.warnOut.(io.Closer); ok && closer != nil {
-		closer.Close()
+		_ = closer.Close()
 	}
 	if closer, ok := s.errorOut.(io.Closer); ok && closer != nil {
-		closer.Close()
+		_ = closer.Close()
 	}
 }
 
-// rotateDaily 每天零點切換日誌檔案
+// rotateDaily rotates log files at midnight
 func (s *SplitOutput) rotateDaily() {
 	for {
 		now := time.Now()
@@ -154,7 +154,7 @@ func (s *SplitOutput) rotateDaily() {
 	}
 }
 
-// Write 實現按級別寫入日誌
+// Write implements level-based log writing
 func (s *SplitOutput) Write(lvl zapcore.Level, p []byte) (n int, err error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -171,7 +171,7 @@ func (s *SplitOutput) Write(lvl zapcore.Level, p []byte) (n int, err error) {
 	}
 }
 
-// Close 關閉分離輸出
+// Close closes the split output
 func (s *SplitOutput) Close() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -179,7 +179,7 @@ func (s *SplitOutput) Close() error {
 	return nil
 }
 
-// splitOutputWrapper 支持 zapcore.WriteSyncer 接口的包裝器
+// splitOutputWrapper wraps SplitOutput to support zapcore.WriteSyncer interface
 type splitOutputWrapper struct {
 	so  *SplitOutput
 	lvl zapcore.Level
@@ -193,19 +193,19 @@ func (w *splitOutputWrapper) Sync() error {
 	return nil
 }
 
-// GetSplitCore 創建按級別分離的日誌核心
+// GetSplitCore creates a level-separated log core
 //
-// 參數：
-//   - directory: 日誌檔案目錄
-//   - filePrefix: 檔案名稱前綴
-//   - encoderConfig: zap 編碼器配置
+// Parameters:
+//   - directory: log file directory
+//   - filePrefix: file name prefix
+//   - encoderConfig: zap encoder configuration
 //
-// 返回：
-//   - zapcore.Core: 可用於 zap.New() 的核心
-//   - func(): 清理函數，程式結束時調用以關閉檔案
-//   - error: 錯誤信息
+// Returns:
+//   - zapcore.Core: core usable with zap.New()
+//   - func(): cleanup function to close files when program ends
+//   - error: error information
 //
-// 注意：此功能不包含 log rotation（大小限制/壓縮），如需請搭配 timberjack
+// Note: This does not include log rotation (size limits/compression), use timberjack if needed
 func GetSplitCore(directory, filePrefix string, encoderConfig zapcore.EncoderConfig) (zapcore.Core, func(), error) {
 	splitOut, err := NewSplitOutput(directory, filePrefix)
 	if err != nil {
@@ -214,12 +214,12 @@ func GetSplitCore(directory, filePrefix string, encoderConfig zapcore.EncoderCon
 
 	encoder := zapcore.NewJSONEncoder(encoderConfig)
 
-	// 創建各級別的 WriteSyncer
+	// Create WriteSyncer for each level
 	infoOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.InfoLevel})
 	warnOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.WarnLevel})
 	errorOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.ErrorLevel})
 
-	// 設置級別過濾
+	// Set level filters
 	infoLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
 		return lvl == zapcore.InfoLevel
 	})
@@ -230,13 +230,13 @@ func GetSplitCore(directory, filePrefix string, encoderConfig zapcore.EncoderCon
 		return lvl >= zapcore.ErrorLevel
 	})
 
-	// 創建三個核心
+	// Create three cores
 	infoCore := zapcore.NewCore(encoder, infoOut, infoLevel)
 	warnCore := zapcore.NewCore(encoder, warnOut, warnLevel)
 	errorCore := zapcore.NewCore(encoder, errorOut, errorLevel)
 
-	// 組合所有核心
+	// Combine all cores
 	core := zapcore.NewTee(infoCore, warnCore, errorCore)
 
-	return core, func() { splitOut.Close() }, nil
+	return core, func() { _ = splitOut.Close() }, nil
 }

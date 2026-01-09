@@ -1,20 +1,20 @@
 package zlogger
 
-// Config 日誌配置結構
-// 可從外部應用程式的設定檔（如 YAML、JSON、TOML）直接綁定
+// Config is the logging configuration structure
+// Can be directly bound from external application config files (YAML, JSON, TOML)
 type Config struct {
-	Level         string   `json:"level" yaml:"level" toml:"level"`                            // 日誌級別: debug, info, warn, error, fatal
-	Format        string   `json:"format" yaml:"format" toml:"format"`                         // 輸出格式: json 或 console
-	Outputs       []string `json:"outputs" yaml:"outputs" toml:"outputs"`                      // 輸出目標: console, file
-	LogPath       string   `json:"log_path" yaml:"log_path" toml:"log_path"`                   // 日誌檔案路徑
-	FileName      string   `json:"file_name" yaml:"file_name" toml:"file_name"`                // 日誌檔案名稱
-	AddCaller     bool     `json:"add_caller" yaml:"add_caller" toml:"add_caller"`             // 是否添加調用者信息
-	AddStacktrace bool     `json:"add_stacktrace" yaml:"add_stacktrace" toml:"add_stacktrace"` // 是否添加堆疊追蹤
-	Development   bool     `json:"development" yaml:"development" toml:"development"`          // 是否為開發模式
-	ColorEnabled  bool     `json:"color_enabled" yaml:"color_enabled" toml:"color_enabled"`    // 是否啟用顏色輸出（僅 console 格式有效）
+	Level         string   `json:"level" yaml:"level" toml:"level"`                            // Log level: debug, info, warn, error, fatal
+	Format        string   `json:"format" yaml:"format" toml:"format"`                         // Output format: json or console
+	Outputs       []string `json:"outputs" yaml:"outputs" toml:"outputs"`                      // Output targets: console, file
+	LogPath       string   `json:"log_path" yaml:"log_path" toml:"log_path"`                   // Log file path
+	FileName      string   `json:"file_name" yaml:"file_name" toml:"file_name"`                // Log file name
+	AddCaller     bool     `json:"add_caller" yaml:"add_caller" toml:"add_caller"`             // Whether to add caller info
+	AddStacktrace bool     `json:"add_stacktrace" yaml:"add_stacktrace" toml:"add_stacktrace"` // Whether to add stack trace
+	Development   bool     `json:"development" yaml:"development" toml:"development"`          // Whether in development mode
+	ColorEnabled  bool     `json:"color_enabled" yaml:"color_enabled" toml:"color_enabled"`    // Whether to enable colored output (console format only)
 }
 
-// DefaultConfig 返回預設配置
+// DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	return &Config{
 		Level:         "info",
@@ -28,12 +28,12 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Merge 將傳入的配置合併到預設配置
+// Merge merges the provided configuration into the default configuration
 //
-// 合併規則：
-//   - string: 空字串不覆蓋
-//   - slice: nil/空切片不覆蓋
-//   - bool: 直接覆蓋（無法區分「未設置」和「設置為 false」）
+// Merge rules:
+//   - string: empty string does not override
+//   - slice: nil/empty slice does not override
+//   - bool: directly overrides (cannot distinguish between "not set" and "set to false")
 func (c *Config) Merge(other *Config) *Config {
 	if other == nil {
 		return c
@@ -54,7 +54,7 @@ func (c *Config) Merge(other *Config) *Config {
 	if other.FileName != "" {
 		c.FileName = other.FileName
 	}
-	// bool 類型直接覆蓋
+	// bool types are directly overridden
 	c.AddCaller = other.AddCaller
 	c.AddStacktrace = other.AddStacktrace
 	c.Development = other.Development

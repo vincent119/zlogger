@@ -4,12 +4,12 @@ import (
 	"context"
 )
 
-// 定義 context key
+// contextKey defines the context key type
 type contextKey string
 
 const loggerContextKey = contextKey("zlogger_fields")
 
-// WithContext 將字段添加到上下文
+// WithContext adds fields to the context
 func WithContext(ctx context.Context, fields ...Field) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -19,15 +19,15 @@ func WithContext(ctx context.Context, fields ...Field) context.Context {
 		return ctx
 	}
 
-	// 獲取現有字段
+	// Get existing fields
 	existingFields := FromContext(ctx)
 
-	// 如果沒有現有字段，直接使用新字段
+	// If no existing fields, use new fields directly
 	if len(existingFields) == 0 {
 		return context.WithValue(ctx, loggerContextKey, fields)
 	}
 
-	// 合併字段
+	// Merge fields
 	newFields := make([]Field, len(existingFields)+len(fields))
 	copy(newFields, existingFields)
 	copy(newFields[len(existingFields):], fields)
@@ -35,7 +35,7 @@ func WithContext(ctx context.Context, fields ...Field) context.Context {
 	return context.WithValue(ctx, loggerContextKey, newFields)
 }
 
-// FromContext 從上下文中提取字段
+// FromContext extracts fields from the context
 func FromContext(ctx context.Context) []Field {
 	if ctx == nil {
 		return nil
@@ -49,7 +49,7 @@ func FromContext(ctx context.Context) []Field {
 	return nil
 }
 
-// DebugContext 使用上下文記錄調試信息
+// DebugContext logs a debug message with context
 func DebugContext(ctx context.Context, msg string, fields ...Field) {
 	if globalLogger == nil {
 		return
@@ -59,7 +59,7 @@ func DebugContext(ctx context.Context, msg string, fields ...Field) {
 	globalLogger.Debug(msg, allFields...)
 }
 
-// InfoContext 使用上下文記錄信息
+// InfoContext logs an info message with context
 func InfoContext(ctx context.Context, msg string, fields ...Field) {
 	if globalLogger == nil {
 		return
@@ -69,7 +69,7 @@ func InfoContext(ctx context.Context, msg string, fields ...Field) {
 	globalLogger.Info(msg, allFields...)
 }
 
-// WarnContext 使用上下文記錄警告信息
+// WarnContext logs a warning message with context
 func WarnContext(ctx context.Context, msg string, fields ...Field) {
 	if globalLogger == nil {
 		return
@@ -79,7 +79,7 @@ func WarnContext(ctx context.Context, msg string, fields ...Field) {
 	globalLogger.Warn(msg, allFields...)
 }
 
-// ErrorContext 使用上下文記錄錯誤信息
+// ErrorContext logs an error message with context
 func ErrorContext(ctx context.Context, msg string, fields ...Field) {
 	if globalLogger == nil {
 		return
@@ -89,7 +89,7 @@ func ErrorContext(ctx context.Context, msg string, fields ...Field) {
 	globalLogger.Error(msg, allFields...)
 }
 
-// FatalContext 使用上下文記錄致命錯誤
+// FatalContext logs a fatal error with context
 func FatalContext(ctx context.Context, msg string, fields ...Field) {
 	if globalLogger == nil {
 		return
@@ -99,7 +99,7 @@ func FatalContext(ctx context.Context, msg string, fields ...Field) {
 	globalLogger.Fatal(msg, allFields...)
 }
 
-// WithRequestID 將請求 ID 添加到上下文
+// WithRequestID adds request ID to context
 func WithRequestID(ctx context.Context, requestID string) context.Context {
 	if requestID == "" {
 		return ctx
@@ -107,7 +107,7 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return WithContext(ctx, String("request_id", requestID))
 }
 
-// WithUserID 將用戶 ID 添加到上下文
+// WithUserID adds user ID to context
 func WithUserID(ctx context.Context, userID interface{}) context.Context {
 	if userID == nil {
 		return ctx
@@ -115,7 +115,7 @@ func WithUserID(ctx context.Context, userID interface{}) context.Context {
 	return WithContext(ctx, Any("user_id", userID))
 }
 
-// WithTraceID 將追蹤 ID 添加到上下文
+// WithTraceID adds trace ID to context
 func WithTraceID(ctx context.Context, traceID string) context.Context {
 	if traceID == "" {
 		return ctx
@@ -123,7 +123,7 @@ func WithTraceID(ctx context.Context, traceID string) context.Context {
 	return WithContext(ctx, String("trace_id", traceID))
 }
 
-// WithOperation 將操作名稱添加到上下文
+// WithOperation adds operation name to context
 func WithOperation(ctx context.Context, operation string) context.Context {
 	if operation == "" {
 		return ctx
@@ -131,7 +131,7 @@ func WithOperation(ctx context.Context, operation string) context.Context {
 	return WithContext(ctx, String("operation", operation))
 }
 
-// WithComponent 將組件名稱添加到上下文
+// WithComponent adds component name to context
 func WithComponent(ctx context.Context, component string) context.Context {
 	if component == "" {
 		return ctx
@@ -139,7 +139,7 @@ func WithComponent(ctx context.Context, component string) context.Context {
 	return WithContext(ctx, String("component", component))
 }
 
-// mergeContextFields 合併上下文字段和傳入字段
+// mergeContextFields merges context fields with provided fields
 func mergeContextFields(ctx context.Context, fields []Field) []Field {
 	if ctx == nil {
 		return fields

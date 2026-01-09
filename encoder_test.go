@@ -23,7 +23,7 @@ func TestNewNoEscapeJSONEncoder(t *testing.T) {
 }
 
 func TestDisableHTMLEscaping(t *testing.T) {
-	// 建立測試用 logger
+	// Create test logger
 	logger := zap.NewNop()
 
 	result := DisableHTMLEscaping(logger)

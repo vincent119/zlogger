@@ -10,14 +10,14 @@ import (
 )
 
 func TestNewSplitOutput(t *testing.T) {
-	// 建立臨時目錄
+	// Create temp directory
 	tmpDir := t.TempDir()
 
 	so, err := NewSplitOutput(tmpDir, "test")
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
 	if so.directory != tmpDir {
 		t.Errorf("expected directory %s, got %s", tmpDir, so.directory)
@@ -28,8 +28,8 @@ func TestNewSplitOutput(t *testing.T) {
 }
 
 func TestNewSplitOutput_InvalidDirectory(t *testing.T) {
-	// 嘗試在無效路徑建立
-	// 注意：這個測試依賴於作業系統權限
+	// Try to create in invalid path
+	// Note: this test depends on OS permissions
 	invalidPath := "/nonexistent/deeply/nested/path/that/should/not/exist"
 
 	_, err := NewSplitOutput(invalidPath, "test")
@@ -45,7 +45,7 @@ func TestSplitOutput_Write_InfoLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
 	testData := []byte("INFO test log message\n")
 	n, err := so.Write(zapcore.InfoLevel, testData)
@@ -56,7 +56,7 @@ func TestSplitOutput_Write_InfoLevel(t *testing.T) {
 		t.Errorf("expected to write %d bytes, wrote %d", len(testData), n)
 	}
 
-	// 驗證檔案存在
+	// Verify file exists
 	files, _ := filepath.Glob(filepath.Join(tmpDir, "app-info-*.log"))
 	if len(files) == 0 {
 		t.Error("expected info log file to be created")
@@ -70,7 +70,7 @@ func TestSplitOutput_Write_WarnLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
 	testData := []byte("WARN test log message\n")
 	n, err := so.Write(zapcore.WarnLevel, testData)
@@ -81,7 +81,7 @@ func TestSplitOutput_Write_WarnLevel(t *testing.T) {
 		t.Errorf("expected to write %d bytes, wrote %d", len(testData), n)
 	}
 
-	// 驗證檔案存在
+	// Verify file exists
 	files, _ := filepath.Glob(filepath.Join(tmpDir, "app-warn-*.log"))
 	if len(files) == 0 {
 		t.Error("expected warn log file to be created")
@@ -95,7 +95,7 @@ func TestSplitOutput_Write_ErrorLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
 	testData := []byte("ERROR test log message\n")
 	n, err := so.Write(zapcore.ErrorLevel, testData)
@@ -106,7 +106,7 @@ func TestSplitOutput_Write_ErrorLevel(t *testing.T) {
 		t.Errorf("expected to write %d bytes, wrote %d", len(testData), n)
 	}
 
-	// 驗證檔案存在
+	// Verify file exists
 	files, _ := filepath.Glob(filepath.Join(tmpDir, "app-error-*.log"))
 	if len(files) == 0 {
 		t.Error("expected error log file to be created")
@@ -120,9 +120,9 @@ func TestSplitOutput_Write_DebugLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
-	// Debug 級別應該寫入 info 檔案
+	// Debug level should write to info file
 	testData := []byte("DEBUG test log message\n")
 	n, err := so.Write(zapcore.DebugLevel, testData)
 	if err != nil {
@@ -140,9 +140,9 @@ func TestSplitOutput_Write_FatalLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
-	// Fatal 級別應該寫入 error 檔案
+	// Fatal level should write to error file
 	testData := []byte("FATAL test log message\n")
 	n, err := so.Write(zapcore.FatalLevel, testData)
 	if err != nil {
@@ -152,7 +152,7 @@ func TestSplitOutput_Write_FatalLevel(t *testing.T) {
 		t.Errorf("expected to write %d bytes, wrote %d", len(testData), n)
 	}
 
-	// 驗證寫入 error 檔案
+	// Verify written to error file
 	files, _ := filepath.Glob(filepath.Join(tmpDir, "app-error-*.log"))
 	if len(files) == 0 {
 		t.Error("expected error log file to be created for Fatal level")
@@ -180,7 +180,7 @@ func TestSplitOutputWrapper_Write(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
 	wrapper := &splitOutputWrapper{so: so, lvl: zapcore.InfoLevel}
 	testData := []byte("wrapper test\n")
@@ -200,7 +200,7 @@ func TestSplitOutputWrapper_Sync(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSplitOutput failed: %v", err)
 	}
-	defer so.Close()
+	defer func() { _ = so.Close() }()
 
 	wrapper := &splitOutputWrapper{so: so, lvl: zapcore.InfoLevel}
 	err = wrapper.Sync()
@@ -230,13 +230,13 @@ func TestGetSplitCore(t *testing.T) {
 		t.Error("expected non-nil core")
 	}
 
-	// 驗證檔案已建立
+	// Verify files created
 	files, _ := os.ReadDir(tmpDir)
 	if len(files) < 3 {
 		t.Errorf("expected at least 3 log files, got %d", len(files))
 	}
 
-	// 檢查檔案名稱
+	// Check file names
 	foundInfo, foundWarn, foundError := false, false, false
 	for _, f := range files {
 		if strings.Contains(f.Name(), "-info-") {

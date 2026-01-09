@@ -1,6 +1,6 @@
-// Package zlogger 提供基於 zap 的結構化日誌庫
+// Package zlogger provides a structured logging library based on zap
 //
-// 詳細使用方式請參考 README.md
+// For detailed usage, please refer to README.md
 package zlogger
 
 import (
@@ -8,21 +8,21 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// 重新導出 zap 的常用類型，方便使用者直接使用
+// Re-export common zap types for convenience
 type (
-	// Logger 是 zap.Logger 的別名
+	// Logger is an alias for zap.Logger
 	Logger = zap.Logger
-	// SugaredLogger 是 zap.SugaredLogger 的別名
+	// SugaredLogger is an alias for zap.SugaredLogger
 	SugaredLogger = zap.SugaredLogger
-	// Level 是 zapcore.Level 的別名
+	// Level is an alias for zapcore.Level
 	Level = zapcore.Level
-	// EncoderConfig 是 zapcore.EncoderConfig 的別名
+	// EncoderConfig is an alias for zapcore.EncoderConfig
 	EncoderConfig = zapcore.EncoderConfig
-	// Core 是 zapcore.Core 的別名
+	// Core is an alias for zapcore.Core
 	Core = zapcore.Core
 )
 
-// 常用的日誌級別常量
+// Common log level constants
 const (
 	DebugLevel  = zapcore.DebugLevel
 	InfoLevel   = zapcore.InfoLevel
@@ -33,7 +33,7 @@ const (
 	FatalLevel  = zapcore.FatalLevel
 )
 
-// Sugar 返回 SugaredLogger，提供更方便的 API
+// Sugar returns a SugaredLogger with a more convenient API
 func Sugar() *SugaredLogger {
 	if globalLogger != nil {
 		return globalLogger.Sugar()
@@ -41,7 +41,7 @@ func Sugar() *SugaredLogger {
 	return nil
 }
 
-// Named 創建具名的子 logger
+// Named creates a named sub-logger
 func Named(name string) *Logger {
 	if globalLogger != nil {
 		return globalLogger.Named(name)
@@ -49,7 +49,7 @@ func Named(name string) *Logger {
 	return nil
 }
 
-// With 創建帶有預設字段的子 logger
+// With creates a sub-logger with preset fields
 func With(fields ...Field) *Logger {
 	if globalLogger != nil {
 		return globalLogger.With(fields...)
@@ -57,7 +57,7 @@ func With(fields ...Field) *Logger {
 	return nil
 }
 
-// WithOptions 創建帶有額外選項的 logger
+// WithOptions creates a logger with additional options
 func WithOptions(opts ...zap.Option) *Logger {
 	if globalLogger != nil {
 		return globalLogger.WithOptions(opts...)
@@ -65,17 +65,17 @@ func WithOptions(opts ...zap.Option) *Logger {
 	return nil
 }
 
-// NewNop 創建一個不輸出任何內容的 logger（用於測試）
+// NewNop creates a no-op logger (useful for testing)
 func NewNop() *Logger {
 	return zap.NewNop()
 }
 
-// NewDevelopment 創建開發模式的 logger
+// NewDevelopment creates a development mode logger
 func NewDevelopment() (*Logger, error) {
 	return zap.NewDevelopment()
 }
 
-// NewProduction 創建生產模式的 logger
+// NewProduction creates a production mode logger
 func NewProduction() (*Logger, error) {
 	return zap.NewProduction()
 }

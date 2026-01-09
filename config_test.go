@@ -48,7 +48,7 @@ func TestConfigMerge_OverrideLevel(t *testing.T) {
 	if result.Level != "debug" {
 		t.Errorf("expected Level 'debug', got '%s'", result.Level)
 	}
-	// 其他值應保持預設
+	// Other values should remain default
 	if result.Format != "console" {
 		t.Errorf("expected Format 'console', got '%s'", result.Format)
 	}
@@ -81,7 +81,7 @@ func TestConfigMerge_OverrideOutputs(t *testing.T) {
 
 func TestConfigMerge_EmptyStringNotOverride(t *testing.T) {
 	cfg := DefaultConfig()
-	other := &Config{Level: ""} // 空字串不應覆蓋
+	other := &Config{Level: ""} // empty string should not override
 
 	result := cfg.Merge(other)
 
@@ -92,7 +92,7 @@ func TestConfigMerge_EmptyStringNotOverride(t *testing.T) {
 
 func TestConfigMerge_EmptySliceNotOverride(t *testing.T) {
 	cfg := DefaultConfig()
-	other := &Config{Outputs: nil} // nil slice 不應覆蓋
+	other := &Config{Outputs: nil} // nil slice should not override
 
 	result := cfg.Merge(other)
 
@@ -103,7 +103,7 @@ func TestConfigMerge_EmptySliceNotOverride(t *testing.T) {
 
 func TestConfigMerge_BoolOverride(t *testing.T) {
 	cfg := DefaultConfig()
-	// AddCaller 預設是 true，測試覆蓋為 false
+	// AddCaller defaults to true, test override to false
 	other := &Config{AddCaller: false}
 
 	result := cfg.Merge(other)

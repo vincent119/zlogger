@@ -21,7 +21,7 @@ func TestSugar_NilLogger(t *testing.T) {
 func TestSugar_WithLogger(t *testing.T) {
 	resetGlobalState()
 
-	// 建立測試用 logger
+	// Create test logger
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:     "ts",
@@ -109,7 +109,7 @@ func TestWith_WithLogger(t *testing.T) {
 		t.Error("expected non-nil Logger with fields")
 	}
 
-	// 使用 withLogger 記錄日誌
+	// Use withLogger to log
 	withLogger.Info("test message")
 
 	output := buf.String()
@@ -158,7 +158,7 @@ func TestNewNop(t *testing.T) {
 		t.Error("expected non-nil nop logger")
 	}
 
-	// nop logger 不應該輸出任何內容
+	// nop logger should not output anything
 	logger.Info("this should not appear anywhere")
 }
 
@@ -228,12 +228,12 @@ func TestSync_WithLogger(t *testing.T) {
 	globalLogger = zap.New(core)
 
 	err := Sync()
-	// Sync 可能會返回錯誤（stdout/stderr 的 sync 問題），但不應該 panic
+	// Sync may return error (stdout/stderr sync issue), but should not panic
 	_ = err
 }
 
-// 重置全局狀態以便測試（如果 core_test.go 未導出）
+// Reset global state for testing (if core_test.go not exported)
 func init() {
-	// 確保 once 可以被重置
+	// Ensure once can be reset
 	_ = sync.Once{}
 }
