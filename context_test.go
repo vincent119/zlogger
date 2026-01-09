@@ -257,3 +257,74 @@ func TestMultipleContextFields(t *testing.T) {
 	}
 }
 
+func TestWithTraceID_EmptyString(t *testing.T) {
+	ctx := context.Background()
+	result := WithTraceID(ctx, "")
+
+	fields := FromContext(result)
+	if fields != nil {
+		t.Errorf("WithTraceID with empty string should not add field, got %v", fields)
+	}
+}
+
+func TestWithOperation_EmptyString(t *testing.T) {
+	ctx := context.Background()
+	result := WithOperation(ctx, "")
+
+	fields := FromContext(result)
+	if fields != nil {
+		t.Errorf("WithOperation with empty string should not add field, got %v", fields)
+	}
+}
+
+func TestWithComponent_EmptyString(t *testing.T) {
+	ctx := context.Background()
+	result := WithComponent(ctx, "")
+
+	fields := FromContext(result)
+	if fields != nil {
+		t.Errorf("WithComponent with empty string should not add field, got %v", fields)
+	}
+}
+
+func TestContextLogFunctions_AllLevels(t *testing.T) {
+	resetGlobalState()
+
+	var buf bytes.Buffer
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
+	}
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig),
+		zapcore.AddSync(&buf),
+		zap.DebugLevel,
+	)
+	globalLogger = zap.New(core)
+	globalConfig = DefaultConfig()
+
+	ctx := WithRequestID(context.Background(), "test-req")
+
+	// 測試所有級別
+	DebugContext(ctx, "debug message")
+	InfoContext(ctx, "info message")
+	WarnContext(ctx, "warn message")
+	ErrorContext(ctx, "error message")
+
+	output := buf.String()
+	if !strings.Contains(output, "debug message") {
+		t.Error("expected debug message in output")
+	}
+	if !strings.Contains(output, "info message") {
+		t.Error("expected info message in output")
+	}
+	if !strings.Contains(output, "warn message") {
+		t.Error("expected warn message in output")
+	}
+	if !strings.Contains(output, "error message") {
+		t.Error("expected error message in output")
+	}
+}
