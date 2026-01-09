@@ -213,11 +213,11 @@ func TestGetSplitCore(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
 	core, cleanup, err := GetSplitCore(tmpDir, "app", encoderConfig)

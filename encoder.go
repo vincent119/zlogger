@@ -16,4 +16,3 @@ func DisableHTMLEscaping(log *zap.Logger) *zap.Logger {
 		return nil
 	}))
 }
-

@@ -79,4 +79,3 @@ func NewDevelopment() (*Logger, error) {
 func NewProduction() (*Logger, error) {
 	return zap.NewProduction()
 }
-

@@ -9,11 +9,11 @@ import (
 
 func TestNewNoEscapeJSONEncoder(t *testing.T) {
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
 	encoder := NewNoEscapeJSONEncoder(encoderConfig)
@@ -31,4 +31,3 @@ func TestDisableHTMLEscaping(t *testing.T) {
 		t.Error("expected non-nil logger")
 	}
 }
-

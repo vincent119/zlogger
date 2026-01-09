@@ -155,4 +155,3 @@ func mergeContextFields(ctx context.Context, fields []Field) []Field {
 	copy(allFields[len(ctxFields):], fields)
 	return allFields
 }
-

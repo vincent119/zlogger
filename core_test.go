@@ -75,11 +75,11 @@ func TestInit_WithNilConfig(t *testing.T) {
 	// 使用自定義 buffer 捕獲輸出
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
@@ -154,11 +154,11 @@ func TestLogWithFields(t *testing.T) {
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
@@ -191,11 +191,11 @@ func TestLogWithFields(t *testing.T) {
 func TestSqlProcessingCore_With(t *testing.T) {
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 	baseCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
@@ -218,11 +218,11 @@ func TestSqlProcessingCore_With(t *testing.T) {
 func TestSqlProcessingCore_Check(t *testing.T) {
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 	baseCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
@@ -247,11 +247,11 @@ func TestSqlProcessingCore_Check(t *testing.T) {
 func TestSqlProcessingCore_Write(t *testing.T) {
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 	baseCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
@@ -281,11 +281,11 @@ func TestSetLevel_WithLogger(t *testing.T) {
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
@@ -312,11 +312,11 @@ func TestLogAllLevels(t *testing.T) {
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
@@ -510,11 +510,11 @@ func TestBuildConsoleCore_JSONFormat(t *testing.T) {
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
 	core := buildConsoleCore(encoderConfig)
@@ -531,11 +531,11 @@ func TestBuildConsoleCore_ConsoleFormat(t *testing.T) {
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
 	core := buildConsoleCore(encoderConfig)
@@ -555,11 +555,11 @@ func TestBuildFileCore_JSONFormat(t *testing.T) {
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
 	core := buildFileCore(encoderConfig)
@@ -579,11 +579,11 @@ func TestBuildFileCore_ConsoleFormat(t *testing.T) {
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
 	core := buildFileCore(encoderConfig)
@@ -604,11 +604,11 @@ func TestBuildFileCore_WithFileName(t *testing.T) {
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "ts",
-		LevelKey:     "level",
-		MessageKey:   "msg",
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		TimeKey:     "ts",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
 	core := buildFileCore(encoderConfig)

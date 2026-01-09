@@ -137,4 +137,3 @@ func Stack(key string) Field {
 func StackSkip(key string, skip int) Field {
 	return zap.StackSkip(key, skip)
 }
-
