@@ -210,5 +210,5 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:|T0' .specs/20
 - [ ] 另立檔案路徑、symlink、權限與 redaction 安全 spec
 - [ ] 另立 encoder 契約與 SQL dead code 清理 spec
 - [ ] 另立 Context fields defensive copy spec
-- [ ] 另立一般／SplitOutput benchmark 與鎖競爭評估 spec
+- [x] 另立一般／SplitOutput benchmark 與鎖競爭評估 spec
 - [ ] 另立 CI toolchain、gosec 與覆蓋率閘門 spec

@@ -5,7 +5,7 @@
 - Draft: 無
 - Type: Chore
 - Owner: vincent119
-- Status: InProgress
+- Status: Complete
 
 ## 文件定位
 
