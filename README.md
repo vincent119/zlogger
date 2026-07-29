@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
 [![CI](https://github.com/vincent119/zlogger/actions/workflows/ci.yml/badge.svg)](https://github.com/vincent119/zlogger/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/vincent119/zlogger/branch/main/graph/badge.svg)](https://codecov.io/gh/vincent119/zlogger)
 [![Go Report Card](https://goreportcard.com/badge/github.com/vincent119/zlogger)](https://goreportcard.com/report/github.com/vincent119/zlogger)
 
 **[English](README.en.md)**
@@ -721,7 +722,8 @@ make fmt-check       # 驗證格式但不修改檔案
 
 CI 在 Linux 使用 Go 1.25.11 與 Go 1.26.5 執行 race 測試，並使用 Go 1.26.5
 執行 macOS 15、Windows 2025 相容性測試。GitHub Actions 均釘選完整 commit
-SHA，workflow token 僅具 `contents: read` 權限。
+SHA，workflow token 僅具 `contents: read` 權限。coverage job 通過 90% 門檻後，
+會將 `coverage.out` 上傳至 Codecov，供 README badge 與歷史趨勢使用。
 
 ## License
 

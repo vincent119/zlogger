@@ -124,6 +124,16 @@ jobs:
       - name: 驗證 90% 覆蓋率
         run: make coverage-check
 
+      - name: 上傳覆蓋率至 Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out
+          disable_search: true
+          flags: unittests
+          fail_ci_if_error: true
+          version: v11.3.1
+
   benchmark:
     name: Benchmark 冒煙測試
     runs-on: ubuntu-24.04
