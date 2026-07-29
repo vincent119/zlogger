@@ -443,16 +443,46 @@ instance, err := NewWithOptions(
 
 ## 11. 性能考量
 
-### 11.1 零分配設計
+### 11.1 配置成本設計
 
 - Field 函數直接轉發到 zap，無額外分配
-- Context 字段合併使用 `make()` 預分配容量
+- Context 字段合併使用 `make()` 一次配置精確容量，避免 slice 重複擴容
+- Context 欄位 ownership 隔離需要複製 slice；這是安全契約，不宣稱零配置
 - 避免不必要的字串操作
 
 ### 11.2 受控初始化
 
 - 使用 mutex 狀態確保只成功初始化一次，且失敗後可重試
 - 全局 logger 使用指針，避免複製開銷
+
+### 11.3 Context 與 SplitOutput 效能基線
+
+以下數據用於辨識相對成本，不是跨硬體 SLA。量測環境為 Apple M1、darwin/arm64，
+同一提交以 Go 1.25.11 與 Go 1.26.5 各執行 10 次，再以固定版本 benchstat 比較。
+
+Context 基線：
+
+- `BenchmarkLoggerInfoContext` 比較直接 fields、只有 Context fields，以及 Context 加本次 fields。
+- Go 1.26.5 中位數分別為 446.6 ns／36 B／2 allocs、532.8 ns／356 B／3 allocs、
+  768.9 ns／744 B／4 allocs。
+- `BenchmarkLoggerWithContext` 比較 1、5、20 個欄位的 batch 與 incremental 建構。
+- 20 個欄位的 batch 為 201.8 ns／1.445 KiB／3 allocs；incremental 為
+  3.351 µs／15.59 KiB／60 allocs。這證明批次加入欄位能避免重複複製，但不構成修改
+  defensive copy 契約的理由。
+
+SplitOutput 基線：
+
+- `BenchmarkLoggerSplitOutputWrite` 使用無狀態記憶體 sink，量測 serial、同 level 並行與
+  混合 level 並行；不包含磁碟、Sync、rotation worker 或額外 sink 鎖。
+- Go 1.26.5 中位數分別為 14.30 ns、90.59 ns、94.45 ns，三者皆為 0 B/op、
+  0 allocs/op。這些數值只代表隔離後的 routing 與 mutex 成本，不代表檔案吞吐。
+- 2 秒並行 mutex profile 中，`(*SplitOutput).Write` 累積涵蓋 96.59% mutex delay，
+  `sync.(*Mutex).Unlock` 為 86.37% flat delay，確認單鎖是此合成案例的主要競爭位置。
+- 兩版 Go 的 B/op 與 allocs/op 完全一致；具統計顯著的時間變化均低於 10%，沒有工具鏈
+  退化超過 10% 的證據。
+
+現階段保留單鎖以維持 writer 與 rotation 的 ownership 正確性。只有實際服務 profile
+也顯示此鎖占比顯著時，才另立 Refactor spec 設計 writer 替換與關閉協議。
 
 ---
 
@@ -529,6 +559,9 @@ race、coverage 與 benchmark。lint 工具缺少或版本不符時必須失敗�
 
 - `BenchmarkLoggerInfoDisabled`：量測未啟用 level 的呼叫成本。
 - `BenchmarkLoggerInfoFields`：量測 JSON 結構化欄位寫入成本。
+- `BenchmarkLoggerInfoContext`：量測 Context 欄位合併與本次欄位成本。
+- `BenchmarkLoggerWithContext`：量測 1／5／20 個欄位的 batch 與 incremental 建構。
+- `BenchmarkLoggerSplitOutputWrite`：以無狀態記憶體 sink 隔離串行與並行 mutex 成本。
 
 CI 只確認 benchmark 可執行；工具鏈或程式碼升級的效能比較需在同一硬體各執行
-五次，再以固定版本 benchstat 比較，避免共享 runner 雜訊形成錯誤閘門。
+至少 10 次，再以固定版本 benchstat 比較，避免共享 runner 雜訊形成錯誤閘門。
