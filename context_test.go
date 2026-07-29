@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"go.uber.org/zap"
@@ -44,6 +45,50 @@ func TestWithContext_AddFields(t *testing.T) {
 	}
 }
 
+func TestWithContextCopiesInputFields(t *testing.T) {
+	tests := []struct {
+		name  string
+		input Field
+		build func([]Field) (context.Context, context.Context)
+		want  []Field
+	}{
+		{
+			name:  "first_batch",
+			input: String("first", "original"),
+			build: func(fields []Field) (context.Context, context.Context) {
+				ctx := WithContext(context.Background(), fields...)
+				return nil, ctx
+			},
+			want: []Field{String("first", "original")},
+		},
+		{
+			name:  "appended_batch",
+			input: String("child", "original"),
+			build: func(fields []Field) (context.Context, context.Context) {
+				parent := WithContext(context.Background(), String("parent", "kept"))
+				return parent, WithContext(parent, fields...)
+			},
+			want: []Field{
+				String("parent", "kept"),
+				String("child", "original"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := []Field{tt.input}
+			parent, ctx := tt.build(input)
+			input[0] = String("mutated", "changed")
+
+			assertFieldsEqual(t, FromContext(ctx), tt.want)
+			if parent != nil {
+				assertFieldsEqual(t, FromContext(parent), []Field{String("parent", "kept")})
+			}
+		})
+	}
+}
+
 func TestFromContext_NilContext(t *testing.T) {
 	var nilCtx context.Context // nil context
 	fields := FromContext(nilCtx)
@@ -59,6 +104,69 @@ func TestFromContext_NoFields(t *testing.T) {
 
 	if fields != nil {
 		t.Errorf("FromContext with no fields should return nil, got %v", fields)
+	}
+}
+
+func TestFromContextReturnsDefensiveCopy(t *testing.T) {
+	ctx := WithContext(context.Background(), String("key", "original"))
+
+	first := FromContext(ctx)
+	first[0] = String("mutated", "changed")
+	second := FromContext(ctx)
+
+	assertFieldsEqual(t, second, []Field{String("key", "original")})
+	if &first[0] == &second[0] {
+		t.Fatal("FromContext 不得回傳共享底層陣列的 slice")
+	}
+}
+
+func TestContextFieldsDefensiveCopyConcurrentAccess(t *testing.T) {
+	input := []Field{String("key", "original")}
+	ctx := WithContext(context.Background(), input...)
+	output := FromContext(ctx)
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			input[0] = String("input", "mutated")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			output[0] = String("output", "mutated")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			_ = FromContext(ctx)
+		}
+	}()
+
+	close(start)
+	wg.Wait()
+
+	assertFieldsEqual(t, FromContext(ctx), []Field{String("key", "original")})
+}
+
+func assertFieldsEqual(t *testing.T, got, want []Field) {
+	t.Helper()
+
+	if len(got) != len(want) {
+		t.Fatalf("欄位數量不符：got %d，want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Key != want[i].Key || got[i].Type != want[i].Type || got[i].String != want[i].String {
+			t.Errorf("欄位 %d 不符：got %#v，want %#v", i, got[i], want[i])
+		}
 	}
 }
 
