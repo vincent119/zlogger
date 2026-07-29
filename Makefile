@@ -3,10 +3,12 @@
 GOCMD ?= go
 GOLANGCI_LINT ?= golangci-lint
 GOLANGCI_LINT_VERSION ?= 2.12.2
+GOVULNCHECK ?= govulncheck
+GOVULNCHECK_VERSION ?= 1.6.0
 COVERAGE_MIN ?= 90.0
 BENCH_PATTERN ?= BenchmarkLogger
 
-.PHONY: all test test-race coverage coverage-check coverage-html lint vet fmt fmt-check bench verify build clean help
+.PHONY: all test test-race coverage coverage-check coverage-html lint vuln vet fmt fmt-check bench verify build clean help
 
 # 預設執行完整品質檢查
 all: verify
@@ -59,6 +61,21 @@ lint:
 	$(GOLANGCI_LINT) config verify
 	$(GOLANGCI_LINT) run ./...
 
+# 使用固定版本 govulncheck 與官方即時資料庫掃描可達漏洞
+vuln:
+	@echo "執行 govulncheck v$(GOVULNCHECK_VERSION)..."
+	@command -v $(GOVULNCHECK) >/dev/null 2>&1 || { \
+		echo "找不到 govulncheck"; \
+		echo "安裝方式：go install golang.org/x/vuln/cmd/govulncheck@v$(GOVULNCHECK_VERSION)"; \
+		exit 1; \
+	}
+	@$(GOVULNCHECK) -version | grep -q "Scanner: govulncheck@v$(GOVULNCHECK_VERSION)" || { \
+		$(GOVULNCHECK) -version; \
+		echo "govulncheck 版本不符，要求 v$(GOVULNCHECK_VERSION)"; \
+		exit 1; \
+	}
+	$(GOVULNCHECK) -db=https://vuln.go.dev ./...
+
 # 執行 Go 靜態分析
 vet:
 	@echo "執行 go vet..."
@@ -110,6 +127,7 @@ help:
 	@echo "  make coverage-check - 驗證覆蓋率不低於門檻"
 	@echo "  make coverage-html  - 產生 HTML 覆蓋率報告"
 	@echo "  make lint           - 執行固定版本 golangci-lint"
+	@echo "  make vuln           - 使用固定版本 govulncheck 掃描可達漏洞"
 	@echo "  make vet            - 執行 go vet"
 	@echo "  make fmt            - 格式化程式碼"
 	@echo "  make fmt-check      - 驗證格式但不修改檔案"

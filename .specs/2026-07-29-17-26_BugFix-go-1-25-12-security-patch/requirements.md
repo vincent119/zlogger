@@ -1,6 +1,6 @@
 # 需求文件：Go 1.25.12 安全修補
 
-Status: InProgress
+Status: Complete
 
 ## 背景
 

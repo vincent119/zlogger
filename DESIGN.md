@@ -542,6 +542,7 @@ SplitOutput 基線：
 | Job | Runner | 驗證 |
 |-----|--------|------|
 | Race | Ubuntu 24.04 | Go 1.25.12、1.26.5 執行 `-race` |
+| Vulnerability | Ubuntu 24.04 | Go 1.25.12、1.26.5 執行 govulncheck v1.6.0 |
 | Portability | macOS 15、Windows 2025 | Go 1.26.5 一般測試 |
 | Lint | Ubuntu 24.04 | golangci-lint v2.12.2、go vet、格式 |
 | Coverage | Ubuntu 24.04 | atomic coverage 不低於 90% |
@@ -565,3 +566,16 @@ race、coverage 與 benchmark。lint 工具缺少或版本不符時必須失敗�
 
 CI 只確認 benchmark 可執行；工具鏈或程式碼升級的效能比較需在同一硬體各執行
 至少 10 次，再以固定版本 benchstat 比較，避免共享 runner 雜訊形成錯誤閘門。
+
+### 14.4 漏洞與依賴更新政策
+
+`make vuln` 與獨立 CI matrix 固定使用 govulncheck v1.6.0，並明確查詢
+`https://vuln.go.dev`。Scanner 版本固定以避免工具行為漂移；漏洞資料維持即時，讓新揭露
+問題能阻擋既有提交。可達漏洞、scanner 版本錯誤、網路或資料庫錯誤皆採 fail closed；
+基礎設施暫時失敗時由維護者人工 rerun，不加入 bypass。`make verify` 不包含漏洞掃描，
+避免本機完整品質檢查依賴外部服務。
+
+Dependabot 以 `.github/dependabot.yml` 分別設定 `gomod` 與 `github-actions`，每週一
+Asia/Taipei 09:00／09:30 錯峰執行，每個 ecosystem 的 version update PR 上限為 2。
+minor／patch 使用 ecosystem 各自的 group；major 與 security update 不分組，必須獨立
+通過完整 CI 與人工審查。設定不包含 auto-merge、reviewer、assignee 或 private registry。
