@@ -149,33 +149,27 @@ func newSplitOutput(
 }
 
 func openSplitFiles(directory, filePrefix, date string) (splitFileSet, error) {
-	files := splitFileSet{}
-
-	infoFile, err := openSecureLogFile(directory, filePrefix+"-info-"+date+".log")
+	opened, err := openRootedLogFiles(
+		directory,
+		filePrefix+"-info-"+date+".log",
+		filePrefix+"-warn-"+date+".log",
+		filePrefix+"-error-"+date+".log",
+	)
 	if err != nil {
-		return splitFileSet{}, fmt.Errorf("開啟 info 日誌檔失敗：%w", err)
+		return splitFileSet{}, fmt.Errorf("開啟分級日誌檔失敗：%w", err)
 	}
-	files.info = infoFile
-
-	warnFile, err := openSecureLogFile(directory, filePrefix+"-warn-"+date+".log")
-	if err != nil {
+	if len(opened) != 3 {
 		return splitFileSet{}, errors.Join(
-			fmt.Errorf("開啟 warn 日誌檔失敗：%w", err),
-			files.close(),
+			fmt.Errorf("取得分級日誌檔案數量 %d，預期 3: %w", len(opened), os.ErrInvalid),
+			closeRootedLogFiles(opened),
 		)
 	}
-	files.warn = warnFile
 
-	errorFile, err := openSecureLogFile(directory, filePrefix+"-error-"+date+".log")
-	if err != nil {
-		return splitFileSet{}, errors.Join(
-			fmt.Errorf("開啟 error 日誌檔失敗：%w", err),
-			files.close(),
-		)
-	}
-	files.error = errorFile
-
-	return files, nil
+	return splitFileSet{
+		info:  opened[0],
+		warn:  opened[1],
+		error: opened[2],
+	}, nil
 }
 
 func (s *SplitOutput) currentFiles() splitFileSet {

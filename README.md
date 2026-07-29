@@ -160,10 +160,16 @@ Config 驗證錯誤同時保留 `ErrInvalidConfig` 分類。
 新建立的日誌目錄使用 `0700`，新建立的日誌檔使用 `0600`。實際權限可能
 被 umask 進一步收緊；已存在的目錄或檔案不會被主動 chmod。
 
-若最終目標已是 symlink，logger 會拒絕開啟且不修改其指向內容。專案最低
-版本已升至 Go 1.25，但目前產品碼仍採 `Lstat` 後再開檔，因此存在並行置換
-造成的 TOCTOU 剩餘風險。需要對抗本機惡意程序時，應另外限制設定來源與
-檔案系統權限；後續將以獨立 TDD 變更採用 `os.Root` containment。
+每批日誌檔案會先以 `os.OpenRoot` 開啟可信任的 base directory，再透過
+root-relative leaf 執行 `Lstat` 與 `OpenFile`。穩定存在的最終 symlink 仍會
+被拒絕；若 leaf 在檢查後被並行替換，`os.Root` 會阻止解析結果逸出 root。
+
+此 containment 不是完整 filesystem sandbox。`OpenRoot` 會跟隨 base path
+本身的 symlink，且不阻止 mount boundary、bind mount、特殊裝置或惡意
+filesystem；呼叫端仍須保護 base directory 與設定來源。競態中替換成指向
+root 內部的 symlink 可能被跟隨，因此不承諾原子拒絕所有 symlink。Go 的
+`js`、`plan9` 與 `wasip1` 平台另有標準庫限制；本專案的跨平台 CI 驗收範圍
+為 Linux、macOS 與 Windows。
 
 ### 敏感資訊
 

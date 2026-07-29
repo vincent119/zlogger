@@ -296,10 +296,17 @@ func newFileCore(
 	if logFileName == "" {
 		logFileName = time.Now().Format("2006-01-02") + ".log"
 	}
-	logFile, err := openSecureLogFile(cfg.LogPath, logFileName)
+	logFiles, err := openRootedLogFiles(cfg.LogPath, logFileName)
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(logFiles) != 1 {
+		return nil, nil, errors.Join(
+			fmt.Errorf("取得日誌檔案數量 %d，預期 1: %w", len(logFiles), os.ErrInvalid),
+			closeRootedLogFiles(logFiles),
+		)
+	}
+	logFile := logFiles[0]
 
 	encoder := newEncoder(cfg.Format, encoderConfig)
 	return zapcore.NewCore(encoder, zapcore.Lock(logFile), level), logFile, nil
