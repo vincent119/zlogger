@@ -1,6 +1,6 @@
 # 任務文件：Context fields 邊界防禦性複製
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -47,8 +47,8 @@ Status: InProgress
 | T2 實作 Context slice ownership | T1 | Complete | 私有 accessor＋邊界淺層複製 |
 | T3 更新 Context 設計契約 | T2 | Complete | 文件明確限定淺層 copy 與 nested reference 責任 |
 | T4 本機完整驗證與邊界檢查 | T2、T3 | Complete | 兩版 race、20 次、verify、92.7% coverage |
-| T5 遠端跨平台驗收 | T4 | Planned | 七項既有 CI 必須全綠 |
-| T6 回填完成狀態 | T5 | Planned | 本 spec 與前置待辦結案 |
+| T5 遠端跨平台驗收 | T4 | Complete | PR #10 的七項 CI 全部通過 |
+| T6 回填完成狀態 | T5 | Complete | 本 spec 與前置待辦已結案 |
 
 ## 實作任務
 
@@ -103,8 +103,8 @@ Status: InProgress
     - `git diff --stat`
     - `git diff --check`
 
-- [ ] T5 遠端跨平台驗收
-  - Status: Planned
+- [x] T5 遠端跨平台驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：workflow、skip、sleep、平台專用繞過
@@ -112,8 +112,8 @@ Status: InProgress
   - Context：commit／push 需使用者另行授權；PR 建立後確認既有七項 CI，包括兩版 race、macOS、Windows、lint、coverage 與 benchmark。
   - Verify：`gh pr checks` 或 `gh run view` 顯示七項 jobs 全部 pass
 
-- [ ] T6 回填完成狀態
-  - Status: Planned
+- [x] T6 回填完成狀態
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 spec；前置安全 spec 只更新 Context defensive copy 待辦
     - Forbidden：其他後續待辦、產品碼或工具設定
@@ -143,7 +143,7 @@ Status: InProgress
   - 無 dependency、CI、Makefile、README 或其他產品碼變更
   - `git diff --check` 通過
 
-- [ ] V5 遠端驗收
+- [x] V5 遠端驗收
   - Go 1.25.11／1.26.5 race 通過
   - macOS 15／Windows 2025 通過
   - 靜態分析、coverage gate、benchmark smoke 通過
@@ -178,13 +178,15 @@ rg -n "^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:" .specs/2026-
 - 2026-07-29：第一次 `make verify` 因本機 golangci-lint v2.12.1 與專案要求 v2.12.2 不符而在 lint 前停止；未降低或修改版本門檻，改將 v2.12.2 安裝至 `/private/tmp/zlogger-tools` 後重跑。
 - 2026-07-29：`make verify GOLANGCI_LINT=/private/tmp/zlogger-tools/golangci-lint` 通過 fmt-check、vet、lint 0 issues、race、92.7% coverage gate 與 benchmark smoke；`git diff --check` 通過，coverage 產物已由 `make clean` 移除。
 - 2026-07-29：差異只包含 `context.go`、`context_test.go`、`DESIGN.md` 與本 spec；私有 `contextFields` 僅有 package 內三個唯讀呼叫點，未修改 dependency、CI、Makefile、README 或 Boundary 外產品碼。T5 保留等待 commit／push 後的遠端驗收。
+- 2026-07-29：PR #10 已合併為 `e1306af`；GitHub Actions run `30430536442` 的七項檢查全部通過，包含 Go 1.25.11／1.26.5 race、macOS 15、Windows 2025、靜態分析、coverage gate 與 benchmark smoke，完成 T5 與 V5。
+- 2026-07-29：完成 T6；requirements 與 tasks 狀態改為 Complete，並回填前置安全 spec 的 Context defensive copy 後續項目。產品碼與其他後續改善未修改。
 
 ## 驗證結果摘要
 
 - 新行為驗證：通過；deterministic input/output mutation、ownership race 與目標測試 20 次均通過
 - 回歸驗證：通過；Go 1.25.11／1.26.5 完整 race 與 `make verify` 通過
 - 文件一致性：已更新 DESIGN 與 godoc，明確限定淺層複製
-- 剩餘風險：公開 `FromContext` 每次讀取增加一次 allocation；nested reference 不在保護範圍；遠端跨平台驗收待 commit／push
+- 剩餘風險：公開 `FromContext` 每次讀取增加一次 allocation；nested reference 不在保護範圍
 
 ## 後續改善
 

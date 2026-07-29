@@ -5,7 +5,7 @@
 - Draft：無
 - Type：BugFix
 - Owner：待確認
-- Status：InProgress
+- Status：Complete
 - 前置規格：`.specs/2026-07-29-11-18_BugFix-file-output-security-boundary/tasks.md` 的後續改善
 
 ## 文件定位
