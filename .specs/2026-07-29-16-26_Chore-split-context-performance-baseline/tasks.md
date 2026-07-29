@@ -1,6 +1,6 @@
 # 任務文件：SplitOutput 與 Context 效能基線
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -48,8 +48,8 @@ Status: InProgress
 | T4 收集兩版樣本與 mutex profile | T2、T3 | Complete | 同提交、同硬體、各 10 次樣本完成 |
 | T5 更新 DESIGN 與分析結論 | T4 | Complete | 已寫入可追溯數據與限制 |
 | T6 完整品質與邊界驗證 | T2 至 T5 | Complete | verify、兩版 race、產物檢查通過 |
-| T7 遠端 benchmark smoke 驗收 | T6 | Planned | push 後確認七項 CI |
-| T8 回填完成狀態與歷史待辦 | T7 | Planned | 只更新明列 checkbox |
+| T7 遠端 benchmark smoke 驗收 | T6 | Complete | PR #16 的七項 CI 與新增 selectors 全部通過 |
+| T8 回填完成狀態與歷史待辦 | T7 | Complete | 規格狀態與明列歷史 checkbox 已回填 |
 
 ## 實作任務
 
@@ -126,8 +126,8 @@ Status: InProgress
     - `git diff --name-only` 只含 Allowed Changes
     - `git status --short` 不含 benchmark、profile 或 coverage 產物
 
-- [ ] T7 遠端 benchmark smoke 與跨平台驗收
-  - Status: Planned
+- [x] T7 遠端 benchmark smoke 與跨平台驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：為通過 CI 修改 workflow、benchmark 語意、skip 或門檻
@@ -135,8 +135,8 @@ Status: InProgress
   - Context：經使用者另行授權 commit／push 後，確認既有七項 CI 全部通過；benchmark job 必須列出新增案例，macOS／Windows 與兩版 race 不得受全域 logger 或 test-only sink 影響。
   - Verify：`gh pr checks` 或 `gh run view` 顯示七個 jobs pass，benchmark log 包含三個新 selector
 
-- [ ] T8 回填完成狀態與歷史待辦
-  - Status: Planned
+- [x] T8 回填完成狀態與歷史待辦
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 requirements／tasks；Execution Context 明列的一個歷史 checkbox
     - Forbidden：其他 spec、產品碼或文件內容重寫
@@ -202,13 +202,16 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' .specs/2026-
 - 2026-07-29：T5 更新 DESIGN 的配置成本、Context／SplitOutput 基線、可重現命令與限制；保留單鎖以維持 writer／rotation ownership，只有實際服務 profile 亦顯著時才另立 Refactor spec。
 - 2026-07-29：T6 的 Go 1.25.11／1.26.5 完整 race 均通過；`make verify GOLANGCI_LINT=/private/tmp/zlogger-tools/golangci-lint` 通過 fmt-check、vet、golangci-lint v2.12.2、race、92.5% coverage gate 與全部 `BenchmarkLogger` smoke。linter 因 sandbox 無法寫入預設 cache 出現 warning，但結果為 0 issues。
 - 2026-07-29：`make clean` 已移除 coverage 產物；`git diff --check` 通過，差異只有 `benchmark_test.go`、`DESIGN.md` 與本 spec 三份文件。未修改產品碼、公開 API、Makefile、CI、dependency 或歷史 checkbox，benchmark／profile 輸出只存在 `/private/tmp`。
+- 2026-07-29：PR #16 已合併為 `18c23c9`；GitHub Actions run `30437300497` 的 macOS 15、Windows 2025、Go 1.25.11／1.26.5 race、靜態與格式、coverage／Codecov、benchmark 共七項工作全部通過，完成 T7。
+- 2026-07-29：遠端 benchmark job `90527941891` 已列出 `BenchmarkLoggerInfoContext`、`BenchmarkLoggerWithContext`、`BenchmarkLoggerSplitOutputWrite` 的全部子案例；確認既有 `BenchmarkLogger` pattern 能在 CI 執行新基線。
+- 2026-07-29：完成 T8；本 spec 狀態已回填為 Complete，並依明列邊界勾選 Config 初始化規格的「另立一般／SplitOutput benchmark 與鎖競爭評估 spec」。
 
 ## 驗證結果摘要
 
 - 新行為驗證：通過；三組新 selectors 的 100 次 smoke、各 5 次目標執行、兩版各 10 次樣本與 mutex profile 完成
 - 回歸驗證：通過；Go 1.25.11／1.26.5 完整 race 與 `make verify` 通過
 - 文件一致性：已確認 DESIGN、benchmark selectors、requirements、design 與 tasks 一致
-- 剩餘風險：尚待 push 後的七項遠端 CI；合成 mutex profile 不代表真實磁碟工作負載，產品重構仍需服務 profile 證據
+- 剩餘風險：無阻擋風險；合成 mutex profile 不代表真實磁碟工作負載，產品重構仍需服務 profile 證據
 
 ## 後續改善
 
