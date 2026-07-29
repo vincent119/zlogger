@@ -10,7 +10,7 @@ import (
 )
 
 func TestSugar_NilLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	sugar := Sugar()
 	if sugar != nil {
@@ -19,7 +19,7 @@ func TestSugar_NilLogger(t *testing.T) {
 }
 
 func TestSugar_WithLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	// Create test logger
 	var buf bytes.Buffer
@@ -44,7 +44,7 @@ func TestSugar_WithLogger(t *testing.T) {
 }
 
 func TestNamed_NilLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	named := Named("test")
 	if named != nil {
@@ -53,7 +53,7 @@ func TestNamed_NilLogger(t *testing.T) {
 }
 
 func TestNamed_WithLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -78,7 +78,7 @@ func TestNamed_WithLogger(t *testing.T) {
 }
 
 func TestWith_NilLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	withLogger := With(String("key", "value"))
 	if withLogger != nil {
@@ -87,7 +87,7 @@ func TestWith_NilLogger(t *testing.T) {
 }
 
 func TestWith_WithLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -119,7 +119,7 @@ func TestWith_WithLogger(t *testing.T) {
 }
 
 func TestWithOptions_NilLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	optLogger := WithOptions(zap.AddCaller())
 	if optLogger != nil {
@@ -128,7 +128,7 @@ func TestWithOptions_NilLogger(t *testing.T) {
 }
 
 func TestWithOptions_WithLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -183,7 +183,7 @@ func TestNewProduction(t *testing.T) {
 }
 
 func TestGetLogger_WithLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -209,8 +209,8 @@ func TestGetLogger_WithLogger(t *testing.T) {
 	}
 }
 
-func TestSync_WithLogger(_ *testing.T) {
-	resetGlobalState()
+func TestSync_WithLogger(t *testing.T) {
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{

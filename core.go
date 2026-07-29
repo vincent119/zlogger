@@ -335,8 +335,8 @@ func buildConsoleCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 	return newConsoleCore(cfg, encoderConfig, zapGlobalLevel)
 }
 
-// buildFileCore 保留既有 package-private 測試入口。
-func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
+// buildFileCore 保留既有 package-private 測試入口，並回傳由呼叫端關閉的檔案。
+func buildFileCore(encoderConfig zapcore.EncoderConfig) (zapcore.Core, *os.File) {
 	cfg := globalConfig
 	if cfg == nil {
 		cfg = DefaultConfig()
@@ -345,11 +345,11 @@ func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 		cfg = cfg.normalizedCopy()
 		cfg.LogPath = "./logs"
 	}
-	core, _, err := newFileCore(cfg, encoderConfig, zapGlobalLevel)
+	core, file, err := newFileCore(cfg, encoderConfig, zapGlobalLevel)
 	if err != nil {
 		panic(err)
 	}
-	return core
+	return core, file
 }
 
 // parseLevel 解析既有 level 字串；未知值維持回退 info 的 legacy 行為。
