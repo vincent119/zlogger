@@ -160,6 +160,44 @@ Config 驗證錯誤同時保留 `ErrInvalidConfig` 分類。
 新建立的日誌目錄使用 `0700`，新建立的日誌檔使用 `0600`。實際權限可能
 被 umask 進一步收緊；已存在的目錄或檔案不會被主動 chmod。
 
+需要讓同一 Unix group 讀取日誌時，可透過 functional options 明確放寬
+新建物件的權限：
+
+```go
+instance, err := zlogger.NewWithOptions(
+	cfg,
+	zlogger.WithDirPerm(0o750),
+	zlogger.WithFilePerm(0o640),
+)
+if err != nil {
+	return err
+}
+defer func() {
+	_ = instance.Close()
+}()
+```
+
+分級輸出使用相同 options，且每日換檔會沿用解析後的 file mode：
+
+```go
+core, cleanup, err := zlogger.GetSplitCoreWithOptions(
+	"./logs",
+	"app",
+	encoderConfig,
+	zlogger.WithDirPerm(0o750),
+	zlogger.WithFilePerm(0o640),
+)
+```
+
+目錄 mode 必須包含 owner `rwx`，檔案 mode 必須包含 owner `rw`；兩者皆
+不得包含非 permission bits 或 other-write。無效設定會回傳可由
+`errors.Is(err, zlogger.ErrInvalidFilePermission)` 判斷的錯誤，且不會建立
+目錄或檔案。同類 option 重複提供時以最後一個為準。
+
+Options 只影響新建立的物件，不能繞過 umask，也不會修改既有權限。
+Windows 可使用相同 API，但不保證具有 POSIX mode 的可觀察語意。放寬
+group／other 讀取權限前，呼叫端必須確認日誌不含不應共享的敏感資料。
+
 每批日誌檔案會先以 `os.OpenRoot` 開啟可信任的 base directory，再透過
 root-relative leaf 執行 `Lstat` 與 `OpenFile`。穩定存在的最終 symlink 仍會
 被拒絕；若 leaf 在檢查後被並行替換，`os.Root` 會阻止解析結果逸出 root。
@@ -587,6 +625,10 @@ defer func() {
 - ERROR、DPANIC、PANIC、FATAL 寫入 error 檔
 
 `cleanup` 會等待每日換檔 goroutine 結束並關閉全部檔案。logger 不再使用時，應先呼叫 `Sync`，再執行 `cleanup`；換檔期間若新檔案無法完整開啟，現有檔案會保留並繼續提供寫入。
+
+如需自訂新建目錄與檔案權限，改用 `GetSplitCoreWithOptions` 並傳入
+`WithDirPerm`、`WithFilePerm`。既有 `GetSplitCore` 保持 `0700`／`0600`
+安全預設。
 
 ## Log Rotation（使用 timberjack）
 

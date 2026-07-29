@@ -86,12 +86,24 @@ func (i *Instance) Close() error {
 // New 建立不修改全域狀態的 logger Instance。
 // nil Config 會使用 DefaultConfig。
 func New(cfg *Config) (*Instance, error) {
+	return NewWithOptions(cfg)
+}
+
+// NewWithOptions 建立可設定新建目錄與檔案權限的 logger Instance。
+//
+// 未提供 options 時與 New 相同。Options 只影響新建立的檔案系統物件，
+// 實際權限仍受 process umask 限縮，且不會改寫既有權限。
+func NewWithOptions(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 	if cfg == nil {
 		cfg = DefaultConfig()
 	} else {
 		cfg = cfg.normalizedCopy()
 	}
 	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	settings, err := resolveFileOutputOptions(opts...)
+	if err != nil {
 		return nil, err
 	}
 
@@ -109,7 +121,7 @@ func New(cfg *Config) (*Instance, error) {
 		case "console":
 			cores = append(cores, newConsoleCore(cfg, encoderConfig, level))
 		case "file":
-			core, file, err := newFileCore(cfg, encoderConfig, level)
+			core, file, err := newFileCoreWithSettings(cfg, encoderConfig, level, settings)
 			if err != nil {
 				return nil, rollback(err)
 			}
@@ -151,11 +163,21 @@ func New(cfg *Config) (*Instance, error) {
 
 // Configure 建立並發布全域 logger，失敗時不修改既有全域狀態。
 func Configure(patch *ConfigPatch) (func() error, error) {
+	return ConfigureWithOptions(patch)
+}
+
+// ConfigureWithOptions 建立可設定檔案建立權限的全域 logger。
+//
+// 未提供 options 時與 Configure 相同；成功時仍由回傳的 cleanup 管理資源。
+func ConfigureWithOptions(
+	patch *ConfigPatch,
+	opts ...FileOutputOption,
+) (func() error, error) {
 	cfg, err := patch.Resolve()
 	if err != nil {
 		return nil, err
 	}
-	return configureResolved(cfg)
+	return configureResolvedWithOptions(cfg, opts...)
 }
 
 // Init 保留既有初始化入口。
@@ -176,13 +198,20 @@ func initLogger(cfg *Config) {
 }
 
 func configureResolved(cfg *Config) (func() error, error) {
+	return configureResolvedWithOptions(cfg)
+}
+
+func configureResolvedWithOptions(
+	cfg *Config,
+	opts ...FileOutputOption,
+) (func() error, error) {
 	configureMu.Lock()
 	defer configureMu.Unlock()
 	if configured {
 		return nil, ErrAlreadyConfigured
 	}
 
-	instance, err := New(cfg)
+	instance, err := NewWithOptions(cfg, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +281,20 @@ func newFileCore(
 	encoderConfig zapcore.EncoderConfig,
 	level zap.AtomicLevel,
 ) (zapcore.Core, *os.File, error) {
-	if err := os.MkdirAll(cfg.LogPath, defaultLogDirMode); err != nil {
+	settings, err := resolveFileOutputOptions()
+	if err != nil {
+		return nil, nil, err
+	}
+	return newFileCoreWithSettings(cfg, encoderConfig, level, settings)
+}
+
+func newFileCoreWithSettings(
+	cfg *Config,
+	encoderConfig zapcore.EncoderConfig,
+	level zap.AtomicLevel,
+	settings fileOutputSettings,
+) (zapcore.Core, *os.File, error) {
+	if err := os.MkdirAll(cfg.LogPath, settings.dirPerm); err != nil {
 		return nil, nil, fmt.Errorf("建立日誌目錄 %q: %w", cfg.LogPath, err)
 	}
 
@@ -260,7 +302,7 @@ func newFileCore(
 	if logFileName == "" {
 		logFileName = time.Now().Format("2006-01-02") + ".log"
 	}
-	logFiles, err := openRootedLogFiles(cfg.LogPath, logFileName)
+	logFiles, err := openRootedLogFilesWithPermissions(cfg.LogPath, settings.filePerm, logFileName)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -260,6 +260,48 @@ func TestFileOutputPreservesExistingPermissions(t *testing.T) {
 	}
 }
 
+func TestFileOutputOptionsPreserveExistingPermissions(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "logs")
+	if err := os.Mkdir(base, 0o750); err != nil {
+		t.Fatalf("建立既有目錄失敗：%v", err)
+	}
+	path := filepath.Join(base, "app.log")
+	const original = "既有內容\n"
+	//nolint:gosec // 測試刻意建立 0640 檔案，驗證 options 不改寫既有權限。
+	if err := os.WriteFile(path, []byte(original), 0o640); err != nil {
+		t.Fatalf("建立既有檔案失敗：%v", err)
+	}
+	beforeDir := pathPermission(t, base)
+	beforeFile := pathPermission(t, path)
+
+	instance, err := NewWithOptions(
+		fileOutputTestConfig(base, "app.log"),
+		WithDirPerm(0o700),
+		WithFilePerm(0o600),
+	)
+	if err != nil {
+		t.Fatalf("開啟既有 file output 失敗：%v", err)
+	}
+	if err := instance.Close(); err != nil {
+		t.Fatalf("關閉既有 file output 失敗：%v", err)
+	}
+
+	if got := pathPermission(t, base); got != beforeDir {
+		t.Fatalf("既有目錄 mode = %04o，原始為 %04o", got, beforeDir)
+	}
+	if got := pathPermission(t, path); got != beforeFile {
+		t.Fatalf("既有檔案 mode = %04o，原始為 %04o", got, beforeFile)
+	}
+	//nolint:gosec // path 由 t.TempDir 與固定安全 leaf 組成。
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("讀取既有日誌檔失敗：%v", err)
+	}
+	if !strings.HasPrefix(string(content), original) {
+		t.Fatalf("既有內容被覆寫：%q", content)
+	}
+}
+
 func TestRootedFileOpenContainsConcurrentReplacement(t *testing.T) {
 	parent := t.TempDir()
 	base := filepath.Join(parent, "logs")

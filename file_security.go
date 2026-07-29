@@ -57,8 +57,17 @@ type rootedDirectory interface {
 
 type rootDirectoryOpener func(string) (rootedDirectory, error)
 
-func openRootedLogFiles(baseDir string, leaves ...string) ([]*os.File, error) {
-	return openRootedLogFilesWith(openLogRoot, baseDir, leaves...)
+func openRootedLogFilesWithPermissions(
+	baseDir string,
+	filePerm os.FileMode,
+	leaves ...string,
+) ([]*os.File, error) {
+	return openRootedLogFilesWithPermissionsAndOpener(
+		openLogRoot,
+		baseDir,
+		filePerm,
+		leaves...,
+	)
 }
 
 func openLogRoot(name string) (rootedDirectory, error) {
@@ -68,6 +77,20 @@ func openLogRoot(name string) (rootedDirectory, error) {
 func openRootedLogFilesWith(
 	openRoot rootDirectoryOpener,
 	baseDir string,
+	leaves ...string,
+) ([]*os.File, error) {
+	return openRootedLogFilesWithPermissionsAndOpener(
+		openRoot,
+		baseDir,
+		defaultLogFileMode,
+		leaves...,
+	)
+}
+
+func openRootedLogFilesWithPermissionsAndOpener(
+	openRoot rootDirectoryOpener,
+	baseDir string,
+	filePerm os.FileMode,
 	leaves ...string,
 ) ([]*os.File, error) {
 	for _, leaf := range leaves {
@@ -103,7 +126,7 @@ func openRootedLogFilesWith(
 		file, openErr := root.OpenFile(
 			leaf,
 			os.O_CREATE|os.O_APPEND|os.O_WRONLY,
-			defaultLogFileMode,
+			filePerm,
 		)
 		if openErr != nil {
 			err = fmt.Errorf("開啟日誌 root %q 的 leaf %q: %w", baseDir, leaf, openErr)
