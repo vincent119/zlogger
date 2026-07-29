@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -657,6 +658,80 @@ func TestNewDoesNotMutateConfig(t *testing.T) {
 	if cfg.Level != "DEBUG" || cfg.Format != "JSON" || cfg.Outputs[0] != "FILE" {
 		t.Fatalf("New 不應修改輸入 Config：%+v", cfg)
 	}
+}
+
+func TestNewWithOptionsUsesConfiguredPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不提供相同 POSIX mode 語意")
+	}
+
+	parent := t.TempDir()
+	referenceDir := filepath.Join(parent, "reference")
+	if err := os.Mkdir(referenceDir, 0o750); err != nil {
+		t.Fatalf("建立參考目錄失敗：%v", err)
+	}
+	referenceFile := filepath.Join(referenceDir, "reference.log")
+	//nolint:gosec // 測試刻意建立 0640 參考檔，驗證自訂 group-read 權限。
+	if err := os.WriteFile(referenceFile, nil, 0o640); err != nil {
+		t.Fatalf("建立參考檔案失敗：%v", err)
+	}
+
+	base := filepath.Join(parent, "logs")
+	instance, err := NewWithOptions(
+		fileOutputTestConfig(base, "app.log"),
+		WithDirPerm(0o750),
+		WithFilePerm(0o640),
+	)
+	if err != nil {
+		t.Fatalf("以自訂 permissions 建立 Instance 失敗：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := instance.Close(); err != nil {
+			t.Errorf("關閉 Instance 失敗：%v", err)
+		}
+	})
+
+	assertSamePermission(t, base, referenceDir)
+	assertSamePermission(t, filepath.Join(base, "app.log"), referenceFile)
+}
+
+func TestConfigureWithOptionsUsesConfiguredPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不提供相同 POSIX mode 語意")
+	}
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+
+	parent := t.TempDir()
+	referenceDir := filepath.Join(parent, "reference")
+	if err := os.Mkdir(referenceDir, 0o750); err != nil {
+		t.Fatalf("建立參考目錄失敗：%v", err)
+	}
+	referenceFile := filepath.Join(referenceDir, "reference.log")
+	//nolint:gosec // 測試刻意建立 0640 參考檔，驗證自訂 group-read 權限。
+	if err := os.WriteFile(referenceFile, nil, 0o640); err != nil {
+		t.Fatalf("建立參考檔案失敗：%v", err)
+	}
+
+	base := filepath.Join(parent, "logs")
+	outputs := []string{"file"}
+	fileName := "app.log"
+	cleanup, err := ConfigureWithOptions(&ConfigPatch{
+		Outputs:  &outputs,
+		LogPath:  &base,
+		FileName: &fileName,
+	}, WithDirPerm(0o750), WithFilePerm(0o640))
+	if err != nil {
+		t.Fatalf("以自訂 permissions 設定全域 logger 失敗：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := cleanup(); err != nil {
+			t.Errorf("清理全域 logger 失敗：%v", err)
+		}
+	})
+
+	assertSamePermission(t, base, referenceDir)
+	assertSamePermission(t, filepath.Join(base, "app.log"), referenceFile)
 }
 
 func TestNewRollsBackResourcesInReverseOrder(t *testing.T) {

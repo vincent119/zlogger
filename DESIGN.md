@@ -278,6 +278,7 @@ logs/
    - 使用可停止的 timer 與 goroutine 等待下一個換檔時間
    - `Close` 會停止 timer、等待 goroutine 結束，再關閉檔案
    - 新檔案未完整開啟時保留既有檔案，避免換檔失敗中斷寫入
+   - `NewSplitOutputWithOptions` 保存解析後的 permission settings，初始三檔與後續換檔使用相同 file mode
    - 注意：這是按日期換檔，不是按大小的 rotation
 
 3. **並行安全與同步**
@@ -380,7 +381,12 @@ func Info(msg string, fields ...Field) {
 - `FileName`／`filePrefix` 是不可信任 leaf，不得包含 `.`、`..`、`/`、`\`、NUL、絕對路徑或 Windows drive prefix。
 - 路徑錯誤以 `ErrUnsafeLogPath` 分類；Config 同時保留 `ErrInvalidConfig`。
 - 新目錄 mode 為 `0700`，新檔 mode 為 `0600`；umask 可進一步收緊。
+- `FileOutputOption` 由 `WithDirPerm`／`WithFilePerm` 建立；同類 option 以最後一個為準。
+- 自訂目錄 mode 必須包含 owner `0700`，自訂檔案 mode 必須包含 owner `0600`；兩者拒絕非 permission bits 與 other-write。
+- `NewWithOptions`／`ConfigureWithOptions` 套用於一般輸出；`NewSplitOutputWithOptions`／`GetSplitCoreWithOptions` 套用於分級輸出與後續換檔。
+- options 在任何目錄或檔案 I/O 前完成驗證，錯誤以 `ErrInvalidFilePermission` 分類。
 - 不對既有目錄或檔案執行 chmod，避免改變共享資源權限。
+- Windows 接受相同 options，但不承諾 POSIX mode 的可觀察效果；呼叫端須評估放寬群組讀寫對敏感日誌的影響。
 - 每批檔案先以 `os.OpenRoot` 開啟可信任 base，再以 root-relative leaf 執行 `Root.Lstat` 與 `Root.OpenFile`；SplitOutput 同批三檔共用單一 root。
 - 最終目標穩定存在為 symlink 時拒絕開啟，不跟隨或覆寫；若在檢查後並行替換，`Root.OpenFile` 保證解析結果不逸出 root。
 - `os.Root` 不等同 filesystem sandbox：`OpenRoot` 會跟隨 base path symlink，且不防 mount boundary、bind mount、特殊裝置或惡意 filesystem。競態中的 root 內 symlink 可能被跟隨，不承諾原子拒絕所有 symlink。
@@ -418,6 +424,20 @@ func WithOptions(opts ...zap.Option) *Logger
 
 - 允許使用者添加自定義 zap.Option
 - 保持與 zap 生態系統的相容性
+
+檔案建立權限使用獨立的 `FileOutputOption`，避免和 `zap.Option` 混用：
+
+```go
+instance, err := NewWithOptions(
+	cfg,
+	WithDirPerm(0o750),
+	WithFilePerm(0o640),
+)
+```
+
+既有 `New`、`Configure`、`NewSplitOutput`、`GetSplitCore` 的精確函式簽章
+維持不變，並以空 options 委派新入口。`Config`／`ConfigPatch` schema 不加入
+`os.FileMode`，避免設定檔序列化語意與非具名 struct literal 相容性問題。
 
 ---
 

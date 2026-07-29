@@ -58,6 +58,13 @@ func (f splitFileSet) sync() error {
 
 type splitFileOpener func(directory, filePrefix, date string) (splitFileSet, error)
 
+type splitFilePermissionOpener func(
+	directory string,
+	filePrefix string,
+	date string,
+	filePerm os.FileMode,
+) (splitFileSet, error)
+
 type rotationTimer interface {
 	C() <-chan time.Time
 	Stop() bool
@@ -110,13 +117,36 @@ type SplitOutput struct {
 	stop      chan struct{}
 	done      chan struct{}
 	clock     rotationClock
-	opener    splitFileOpener
+	opener    splitFilePermissionOpener
+	settings  fileOutputSettings
 }
 
 // NewSplitOutput 建立分級日誌輸出，並啟動每日換檔 worker。
 // filePrefix 只能是單一 leaf name；不安全路徑會回傳 ErrUnsafeLogPath。
 func NewSplitOutput(directory, filePrefix string) (*SplitOutput, error) {
-	return newSplitOutput(directory, filePrefix, systemRotationClock{}, openSplitFiles)
+	return NewSplitOutputWithOptions(directory, filePrefix)
+}
+
+// NewSplitOutputWithOptions 建立可設定新建目錄與檔案權限的分級輸出。
+//
+// 未提供 options 時與 NewSplitOutput 相同。解析後的權限會沿用至每日換檔；
+// 實際權限仍受 process umask 限縮，且不會改寫既有權限。
+func NewSplitOutputWithOptions(
+	directory string,
+	filePrefix string,
+	opts ...FileOutputOption,
+) (*SplitOutput, error) {
+	settings, err := resolveFileOutputOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+	return newSplitOutputWithSettings(
+		directory,
+		filePrefix,
+		systemRotationClock{},
+		openSplitFilesWithPermissions,
+		settings,
+	)
 }
 
 func newSplitOutput(
@@ -125,10 +155,47 @@ func newSplitOutput(
 	clock rotationClock,
 	opener splitFileOpener,
 ) (*SplitOutput, error) {
+	settings, err := resolveFileOutputOptions()
+	if err != nil {
+		return nil, err
+	}
+	var permissionOpener splitFilePermissionOpener
+	if opener != nil {
+		permissionOpener = func(
+			directory string,
+			filePrefix string,
+			date string,
+			_ os.FileMode,
+		) (splitFileSet, error) {
+			return opener(directory, filePrefix, date)
+		}
+	}
+	return newSplitOutputWithSettings(
+		directory,
+		filePrefix,
+		clock,
+		permissionOpener,
+		settings,
+	)
+}
+
+func newSplitOutputWithSettings(
+	directory string,
+	filePrefix string,
+	clock rotationClock,
+	opener splitFilePermissionOpener,
+	settings fileOutputSettings,
+) (*SplitOutput, error) {
 	if err := validateLogLeaf(filePrefix, true); err != nil {
 		return nil, fmt.Errorf("驗證分級日誌 prefix: %w", err)
 	}
-	if err := os.MkdirAll(directory, defaultLogDirMode); err != nil {
+	if err := validateFileOutputPermission("目錄", settings.dirPerm, 0o700); err != nil {
+		return nil, err
+	}
+	if err := validateFileOutputPermission("檔案", settings.filePerm, 0o600); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(directory, settings.dirPerm); err != nil {
 		return nil, fmt.Errorf("建立日誌目錄失敗：%w", err)
 	}
 
@@ -139,6 +206,7 @@ func newSplitOutput(
 		done:       make(chan struct{}),
 		clock:      clock,
 		opener:     opener,
+		settings:   settings,
 	}
 	if err := output.openFiles(); err != nil {
 		return nil, err
@@ -149,8 +217,23 @@ func newSplitOutput(
 }
 
 func openSplitFiles(directory, filePrefix, date string) (splitFileSet, error) {
-	opened, err := openRootedLogFiles(
+	return openSplitFilesWithPermissions(
 		directory,
+		filePrefix,
+		date,
+		defaultLogFileMode,
+	)
+}
+
+func openSplitFilesWithPermissions(
+	directory string,
+	filePrefix string,
+	date string,
+	filePerm os.FileMode,
+) (splitFileSet, error) {
+	opened, err := openRootedLogFilesWithPermissions(
+		directory,
+		filePerm,
 		filePrefix+"-info-"+date+".log",
 		filePrefix+"-warn-"+date+".log",
 		filePrefix+"-error-"+date+".log",
@@ -196,6 +279,7 @@ func (s *SplitOutput) openFiles() error {
 	}
 	clock := s.clock
 	opener := s.opener
+	filePerm := s.settings.filePerm
 	s.mutex.Unlock()
 
 	if clock == nil || opener == nil {
@@ -203,7 +287,7 @@ func (s *SplitOutput) openFiles() error {
 	}
 
 	date := clock.Now().Format("2006-01-02")
-	newFiles, err := opener(s.directory, s.filePrefix, date)
+	newFiles, err := opener(s.directory, s.filePrefix, date, filePerm)
 	if err != nil {
 		return err
 	}
@@ -348,7 +432,19 @@ func GetSplitCore(
 	filePrefix string,
 	encoderConfig zapcore.EncoderConfig,
 ) (zapcore.Core, func(), error) {
-	splitOut, err := NewSplitOutput(directory, filePrefix)
+	return GetSplitCoreWithOptions(directory, filePrefix, encoderConfig)
+}
+
+// GetSplitCoreWithOptions 建立可設定檔案建立權限的分級 zap core。
+//
+// 未提供 options 時與 GetSplitCore 相同，cleanup 契約維持不變。
+func GetSplitCoreWithOptions(
+	directory string,
+	filePrefix string,
+	encoderConfig zapcore.EncoderConfig,
+	opts ...FileOutputOption,
+) (zapcore.Core, func(), error) {
+	splitOut, err := NewSplitOutputWithOptions(directory, filePrefix, opts...)
 	if err != nil {
 		return nil, nil, err
 	}

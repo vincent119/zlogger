@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -504,6 +505,145 @@ func TestSplitOutputRotationSwitchesFiles(t *testing.T) {
 	}
 	if !strings.Contains(string(data), strings.TrimSpace(string(message))) {
 		t.Error("換檔成功後的訊息未寫入新日期 info 日誌檔")
+	}
+}
+
+func TestSplitOutputWithOptionsPreservesPermissionsAcrossRotation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不提供相同 POSIX mode 語意")
+	}
+
+	parent := t.TempDir()
+	referenceDir := filepath.Join(parent, "reference")
+	if err := os.Mkdir(referenceDir, 0o750); err != nil {
+		t.Fatalf("建立參考目錄失敗：%v", err)
+	}
+	referenceFile := filepath.Join(referenceDir, "reference.log")
+	//nolint:gosec // 測試刻意建立 0640 參考檔，驗證 rotation 沿用 group-read 權限。
+	if err := os.WriteFile(referenceFile, nil, 0o640); err != nil {
+		t.Fatalf("建立參考檔案失敗：%v", err)
+	}
+
+	settings, err := resolveFileOutputOptions(WithDirPerm(0o750), WithFilePerm(0o640))
+	if err != nil {
+		t.Fatalf("解析自訂 permissions 失敗：%v", err)
+	}
+	now := time.Date(2026, time.July, 29, 10, 0, 0, 0, time.Local)
+	clock := newManualRotationClock(now)
+	base := filepath.Join(parent, "logs")
+	output, err := newSplitOutputWithSettings(base, "app", clock, openSplitFilesWithPermissions, settings)
+	if err != nil {
+		t.Fatalf("以自訂 permissions 建立 SplitOutput 失敗：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := output.Close(); err != nil {
+			t.Errorf("關閉 SplitOutput 失敗：%v", err)
+		}
+	})
+
+	assertSamePermission(t, base, referenceDir)
+	assertSplitFilePermissions(t, base, "app", now, referenceFile)
+
+	firstTimer := clock.nextTimer(t)
+	nextDay := now.AddDate(0, 0, 1)
+	clock.setNow(nextDay)
+	firstTimer.fire(nextDay)
+	clock.nextTimer(t)
+
+	assertSplitFilePermissions(t, base, "app", nextDay, referenceFile)
+}
+
+func TestNewSplitOutputWithOptionsUsesConfiguredPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不提供相同 POSIX mode 語意")
+	}
+
+	parent := t.TempDir()
+	referenceDir, referenceFile := createPermissionReference(t, parent)
+	base := filepath.Join(parent, "logs")
+	output, err := NewSplitOutputWithOptions(
+		base,
+		"app",
+		WithDirPerm(0o750),
+		WithFilePerm(0o640),
+	)
+	if err != nil {
+		t.Fatalf("以自訂 permissions 建立 SplitOutput 失敗：%v", err)
+	}
+	if err := output.Close(); err != nil {
+		t.Fatalf("關閉 SplitOutput 失敗：%v", err)
+	}
+
+	assertSamePermission(t, base, referenceDir)
+	assertCreatedSplitFilePermissions(t, base, "app", referenceFile)
+}
+
+func TestGetSplitCoreWithOptionsUsesConfiguredPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不提供相同 POSIX mode 語意")
+	}
+
+	parent := t.TempDir()
+	referenceDir, referenceFile := createPermissionReference(t, parent)
+	base := filepath.Join(parent, "logs")
+	encoderConfig := zapcore.EncoderConfig{
+		MessageKey: "msg",
+		EncodeTime: zapcore.ISO8601TimeEncoder,
+	}
+	core, cleanup, err := GetSplitCoreWithOptions(
+		base,
+		"app",
+		encoderConfig,
+		WithDirPerm(0o750),
+		WithFilePerm(0o640),
+	)
+	if err != nil {
+		t.Fatalf("以自訂 permissions 建立 split core 失敗：%v", err)
+	}
+	if core == nil || cleanup == nil {
+		t.Fatal("成功時應回傳 core 與 cleanup")
+	}
+	cleanup()
+
+	assertSamePermission(t, base, referenceDir)
+	assertCreatedSplitFilePermissions(t, base, "app", referenceFile)
+}
+
+func assertCreatedSplitFilePermissions(
+	t *testing.T,
+	base string,
+	prefix string,
+	referenceFile string,
+) {
+	t.Helper()
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		t.Fatalf("讀取分級輸出目錄失敗：%v", err)
+	}
+	matched := 0
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), prefix+"-") || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		matched++
+		assertSamePermission(t, filepath.Join(base, entry.Name()), referenceFile)
+	}
+	if matched != 3 {
+		t.Fatalf("符合 prefix 的分級檔案數 = %d，預期 3", matched)
+	}
+}
+
+func assertSplitFilePermissions(
+	t *testing.T,
+	base string,
+	prefix string,
+	date time.Time,
+	referenceFile string,
+) {
+	t.Helper()
+	for _, level := range []string{"info", "warn", "error"} {
+		path := filepath.Join(base, prefix+"-"+level+"-"+date.Format("2006-01-02")+".log")
+		assertSamePermission(t, path, referenceFile)
 	}
 }
 
