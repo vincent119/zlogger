@@ -201,7 +201,10 @@ zlogger.InfoContext(ctx, "登入成功")  // 自動帶入所有追蹤資訊
 zlogger.String("key", "value")
 zlogger.Int("count", 42)
 zlogger.Err(err)
+zlogger.Redacted("authorization") // 固定輸出 [REDACTED]
 ```
+
+`Redacted(key)` 不接收秘密值，也不依欄位名稱自動猜測或遮罩敏感資料。
 
 ### 5.2 類型別名
 
@@ -349,12 +352,14 @@ tjLogger := &timberjack.Logger{
 ### 9.1 初始化錯誤
 
 ```go
-if err := os.MkdirAll(logDir, 0755); err != nil {
-    panic("無法建立日誌目錄: " + err.Error())
+instance, err := zlogger.New(cfg)
+if err != nil {
+    return fmt.Errorf("建立 logger: %w", err)
 }
+defer instance.Close()
 ```
 
-**設計決策：** 使用 `panic` 而非返回錯誤
+**設計決策：** 安全入口回傳可分類錯誤，完整成功後才發布 logger
 
 **理由：**
 
@@ -379,6 +384,18 @@ func Info(msg string, fields ...Field) {
 - 避免 nil pointer panic
 - 允許在未初始化時調用（雖然不會輸出）
 - 提高容錯性
+
+### 9.3 檔案輸出安全邊界
+
+- `LogPath`／`directory` 是呼叫端信任的 base directory。
+- `FileName`／`filePrefix` 是不可信任 leaf，不得包含 `.`、`..`、`/`、`\`、NUL、絕對路徑或 Windows drive prefix。
+- 路徑錯誤以 `ErrUnsafeLogPath` 分類；Config 同時保留 `ErrInvalidConfig`。
+- 新目錄 mode 為 `0700`，新檔 mode 為 `0600`；umask 可進一步收緊。
+- 不對既有目錄或檔案執行 chmod，避免改變共享資源權限。
+- 最終目標已是 symlink 時拒絕開啟，不跟隨或覆寫。
+- Go 1.21 實作使用 `Lstat` 後開檔，仍有 TOCTOU race；需要更強 containment 時，應在 Go 基線升版後改用 `os.Root`。
+- 敏感欄位採白名單；token、密碼、Authorization、cookie 與完整個資不得進入日誌。
+- `Redacted` 需由呼叫端主動使用，不提供自動 redaction。
 
 ---
 

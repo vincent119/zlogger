@@ -97,6 +97,7 @@ func (p *ConfigPatch) Resolve() (*Config, error) {
 }
 
 // Validate 檢查完整設定，不修改呼叫端提供的物件。
+// file output 的 FileName 必須是安全 leaf name。
 func (c *Config) Validate() error {
 	if c == nil {
 		return fmt.Errorf("%w: Config 不可為 nil", ErrInvalidConfig)
@@ -137,6 +138,11 @@ func (c *Config) Validate() error {
 
 	if fileEnabled && c.LogPath == "" {
 		return fmt.Errorf("%w: file output 的 LogPath 不可為空", ErrInvalidConfig)
+	}
+	if fileEnabled {
+		if err := validateLogLeaf(c.FileName, true); err != nil {
+			return fmt.Errorf("%w: FileName: %w", ErrInvalidConfig, err)
+		}
 	}
 
 	return nil

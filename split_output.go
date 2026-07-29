@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -115,6 +114,7 @@ type SplitOutput struct {
 }
 
 // NewSplitOutput 建立分級日誌輸出，並啟動每日換檔 worker。
+// filePrefix 只能是單一 leaf name；不安全路徑會回傳 ErrUnsafeLogPath。
 func NewSplitOutput(directory, filePrefix string) (*SplitOutput, error) {
 	return newSplitOutput(directory, filePrefix, systemRotationClock{}, openSplitFiles)
 }
@@ -125,7 +125,10 @@ func newSplitOutput(
 	clock rotationClock,
 	opener splitFileOpener,
 ) (*SplitOutput, error) {
-	if err := os.MkdirAll(directory, 0755); err != nil {
+	if err := validateLogLeaf(filePrefix, true); err != nil {
+		return nil, fmt.Errorf("驗證分級日誌 prefix: %w", err)
+	}
+	if err := os.MkdirAll(directory, defaultLogDirMode); err != nil {
 		return nil, fmt.Errorf("建立日誌目錄失敗：%w", err)
 	}
 
@@ -148,21 +151,13 @@ func newSplitOutput(
 func openSplitFiles(directory, filePrefix, date string) (splitFileSet, error) {
 	files := splitFileSet{}
 
-	infoFile, err := os.OpenFile(
-		filepath.Join(directory, filePrefix+"-info-"+date+".log"),
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
-		0644,
-	)
+	infoFile, err := openSecureLogFile(directory, filePrefix+"-info-"+date+".log")
 	if err != nil {
 		return splitFileSet{}, fmt.Errorf("開啟 info 日誌檔失敗：%w", err)
 	}
 	files.info = infoFile
 
-	warnFile, err := os.OpenFile(
-		filepath.Join(directory, filePrefix+"-warn-"+date+".log"),
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
-		0644,
-	)
+	warnFile, err := openSecureLogFile(directory, filePrefix+"-warn-"+date+".log")
 	if err != nil {
 		return splitFileSet{}, errors.Join(
 			fmt.Errorf("開啟 warn 日誌檔失敗：%w", err),
@@ -171,11 +166,7 @@ func openSplitFiles(directory, filePrefix, date string) (splitFileSet, error) {
 	}
 	files.warn = warnFile
 
-	errorFile, err := os.OpenFile(
-		filepath.Join(directory, filePrefix+"-error-"+date+".log"),
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
-		0644,
-	)
+	errorFile, err := openSecureLogFile(directory, filePrefix+"-error-"+date+".log")
 	if err != nil {
 		return splitFileSet{}, errors.Join(
 			fmt.Errorf("開啟 error 日誌檔失敗：%w", err),

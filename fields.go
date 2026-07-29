@@ -13,6 +13,11 @@ func String(key, value string) Field {
 	return zap.String(key, value)
 }
 
+// Redacted 建立固定遮罩值的字串欄位，且不接收原始秘密值。
+func Redacted(key string) Field {
+	return zap.String(key, "[REDACTED]")
+}
+
 // Strings creates a string slice type field
 func Strings(key string, value []string) Field {
 	return zap.Strings(key, value)
