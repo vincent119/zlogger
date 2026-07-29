@@ -4,7 +4,7 @@
 
 - Type：BugFix
 - Owner：待確認
-- Status：InProgress
+- Status：Complete
 - 失敗紀錄：PR #4，GitHub Actions run `30425061820`，Windows job `90489619085`
 
 ## 文件定位
