@@ -462,6 +462,7 @@ func TestSplitOutputRotationFailureKeepsCurrentFiles(t *testing.T) {
 	}
 
 	infoPath := filepath.Join(tmpDir, "app-info-"+now.Format("2006-01-02")+".log")
+	//nolint:gosec // infoPath 由 t.TempDir 與固定分級檔名組成。
 	data, err := os.ReadFile(infoPath)
 	if err != nil {
 		t.Fatalf("讀取既有 info 日誌檔失敗：%v", err)
@@ -496,6 +497,7 @@ func TestSplitOutputRotationSwitchesFiles(t *testing.T) {
 	}
 
 	newInfoPath := filepath.Join(tmpDir, "app-info-"+nextDay.Format("2006-01-02")+".log")
+	//nolint:gosec // newInfoPath 由 t.TempDir 與固定分級檔名組成。
 	data, err := os.ReadFile(newInfoPath)
 	if err != nil {
 		t.Fatalf("讀取換檔後 info 日誌檔失敗：%v", err)

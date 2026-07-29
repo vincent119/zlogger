@@ -2,9 +2,8 @@
 
 [![GitHub](https://img.shields.io/badge/github-vincent119/zlogger-blue?logo=github)](https://github.com/vincent119/zlogger)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.19+-00ADD8?logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
 [![CI](https://github.com/vincent119/zlogger/actions/workflows/ci.yml/badge.svg)](https://github.com/vincent119/zlogger/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/vincent119/zlogger/branch/main/graph/badge.svg)](https://codecov.io/gh/vincent119/zlogger)
 [![Go Report Card](https://goreportcard.com/badge/github.com/vincent119/zlogger)](https://goreportcard.com/report/github.com/vincent119/zlogger)
 
 **[English](README.en.md)**
@@ -12,6 +11,8 @@
 基於 [zap](https://github.com/uber-go/zap) 的結構化日誌庫，提供簡潔的 API 和豐富的功能。
 
 ## 安裝
+
+需要 Go 1.25 或更新版本。
 
 ```bash
 go get github.com/vincent119/zlogger
@@ -158,10 +159,10 @@ Config 驗證錯誤同時保留 `ErrInvalidConfig` 分類。
 新建立的日誌目錄使用 `0700`，新建立的日誌檔使用 `0600`。實際權限可能
 被 umask 進一步收緊；已存在的目錄或檔案不會被主動 chmod。
 
-若最終目標已是 symlink，logger 會拒絕開啟且不修改其指向內容。專案目前
-維持 Go 1.21 最低版本，因此檢查採 `Lstat` 後再開檔，仍存在並行置換造成的
-TOCTOU 剩餘風險。需要對抗本機惡意程序時，應另外限制設定來源與檔案系統
-權限，並在工具鏈升版後採用 `os.Root` 類型的 containment。
+若最終目標已是 symlink，logger 會拒絕開啟且不修改其指向內容。專案最低
+版本已升至 Go 1.25，但目前產品碼仍採 `Lstat` 後再開檔，因此存在並行置換
+造成的 TOCTOU 剩餘風險。需要對抗本機惡意程序時，應另外限制設定來源與
+檔案系統權限；後續將以獨立 TDD 變更採用 `os.Root` containment。
 
 ### 敏感資訊
 
@@ -699,6 +700,28 @@ cleanup, err := zlogger.Configure(&zlogger.ConfigPatch{
 ```
 
 > **注意：** Log rotation（檔案大小限制、備份、壓縮）請使用 timberjack，參考上方範例。
+
+## 開發與品質驗證
+
+本機完整驗證入口：
+
+```bash
+make verify
+```
+
+主要子命令：
+
+```bash
+make test-race       # race detector 測試
+make lint            # golangci-lint v2.12.2
+make coverage-check  # 總覆蓋率不得低於 90%
+make bench           # logger 關鍵路徑 benchmark
+make fmt-check       # 驗證格式但不修改檔案
+```
+
+CI 在 Linux 使用 Go 1.25.11 與 Go 1.26.5 執行 race 測試，並使用 Go 1.26.5
+執行 macOS 15、Windows 2025 相容性測試。GitHub Actions 均釘選完整 commit
+SHA，workflow token 僅具 `contents: read` 權限。
 
 ## License
 

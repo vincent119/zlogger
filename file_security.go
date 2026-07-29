@@ -81,6 +81,7 @@ func openSecureLogFile(baseDir, leaf string) (*os.File, error) {
 		return nil, fmt.Errorf("檢查日誌檔案 %q: %w", target, err)
 	}
 
+	//nolint:gosec // target 已通過 leaf containment 與既有 symlink 檢查。
 	file, err := os.OpenFile(target, os.O_CREATE|os.O_APPEND|os.O_WRONLY, defaultLogFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("開啟日誌檔案 %q: %w", target, err)

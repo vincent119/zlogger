@@ -393,7 +393,7 @@ func Info(msg string, fields ...Field) {
 - 新目錄 mode 為 `0700`，新檔 mode 為 `0600`；umask 可進一步收緊。
 - 不對既有目錄或檔案執行 chmod，避免改變共享資源權限。
 - 最終目標已是 symlink 時拒絕開啟，不跟隨或覆寫。
-- Go 1.21 實作使用 `Lstat` 後開檔，仍有 TOCTOU race；需要更強 containment 時，應在 Go 基線升版後改用 `os.Root`。
+- 最低版本已升至 Go 1.25，但目前實作仍使用 `Lstat` 後開檔，仍有 TOCTOU race；後續以獨立 TDD 變更採用 `os.Root`，不得把工具鏈升版誤認為安全行為已完成。
 - 敏感欄位採白名單；token、密碼、Authorization、cookie 與完整個資不得進入日誌。
 - `Redacted` 需由呼叫端主動使用，不提供自動 redaction。
 
@@ -485,3 +485,40 @@ func WithOptions(opts ...zap.Option) *Logger
 | 分離輸出 | 需自行實現   | 提供 `GetSplitCore()`       |
 
 **設計目標：** 在保持 zap 性能的同時，提供更簡潔的 API 和更豐富的功能。
+
+---
+
+## 14. 工具鏈與 CI 品質基線
+
+### 14.1 Go 支援政策
+
+- `go.mod` 最低版本為 Go 1.25.0，不加入 `toolchain` directive。
+- CI 最低版本固定為 Go 1.25.11，現行版本固定為 Go 1.26.5。
+- 新的 security patch 由獨立 PR 更新精確版本，不使用 `stable` 或浮動版本。
+- 提高最低 minor 版本屬 build-time 相容性變更，必須在 README 與 PR 說明。
+
+### 14.2 CI 分工
+
+| Job | Runner | 驗證 |
+|-----|--------|------|
+| Race | Ubuntu 24.04 | Go 1.25.11、1.26.5 執行 `-race` |
+| Portability | macOS 15、Windows 2025 | Go 1.26.5 一般測試 |
+| Lint | Ubuntu 24.04 | golangci-lint v2.12.2、go vet、格式 |
+| Coverage | Ubuntu 24.04 | atomic coverage 不低於 90% |
+| Benchmark | Ubuntu 24.04 | logger benchmark smoke test |
+
+所有外部 GitHub Actions 使用官方 tag 對應的完整 40 字元 commit SHA，workflow
+token 只有 `contents: read`。品質判定不依賴 Codecov 或 repository secret。
+
+### 14.3 本機驗證與 benchmark
+
+`make verify` 是本機與 CI 共用的非產品修改型驗證入口，包含格式、vet、lint、
+race、coverage 與 benchmark。lint 工具缺少或版本不符時必須失敗，不得靜默跳過。
+
+關鍵路徑 benchmark 使用 `io.Discard`，不碰網路、stdout 或檔案系統：
+
+- `BenchmarkLoggerInfoDisabled`：量測未啟用 level 的呼叫成本。
+- `BenchmarkLoggerInfoFields`：量測 JSON 結構化欄位寫入成本。
+
+CI 只確認 benchmark 可執行；工具鏈或程式碼升級的效能比較需在同一硬體各執行
+五次，再以固定版本 benchstat 比較，避免共享 runner 雜訊形成錯誤閘門。

@@ -12,7 +12,7 @@ func NewNoEscapeJSONEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
 
 // DisableHTMLEscaping adds a hook to the logger (reserved for extension)
 func DisableHTMLEscaping(log *zap.Logger) *zap.Logger {
-	return log.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+	return log.WithOptions(zap.Hooks(func(_ zapcore.Entry) error {
 		return nil
 	}))
 }

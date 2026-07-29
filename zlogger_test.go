@@ -209,7 +209,7 @@ func TestGetLogger_WithLogger(t *testing.T) {
 	}
 }
 
-func TestSync_WithLogger(t *testing.T) {
+func TestSync_WithLogger(_ *testing.T) {
 	resetGlobalState()
 
 	var buf bytes.Buffer
