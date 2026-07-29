@@ -166,6 +166,13 @@ const loggerContextKey = contextKey("zlogger_fields")
    - `*Context()` 函數自動合併 context 中的字段
    - 無需手動提取和合併
 
+4. **欄位 ownership 隔離**
+
+   - `WithContext` 在寫入前防禦性複製 `[]Field`，呼叫端後續修改輸入 slice 不會污染 context
+   - `FromContext` 回傳 `[]Field` 的淺層副本，修改回傳 slice 不會改變 context 內部欄位
+   - package 內部透過唯讀 accessor 合併欄位，避免公開 clone 後再次複製
+   - 淺層複製不會複製 `Field.Interface` 內的 map、slice、pointer 或其他參照物件；其並行安全仍由呼叫端負責
+
 ### 4.2 使用場景
 
 **HTTP 請求追蹤：**
