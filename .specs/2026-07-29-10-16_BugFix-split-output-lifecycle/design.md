@@ -52,7 +52,7 @@
 | Close 冪等與並行安全 | `sync.Once` 保存第一次 close 結果 | `TestSplitOutputCloseIdempotent`、race detector |
 | 關閉後拒絕操作 | mutex 保護的 closed 狀態；回傳包裝 `os.ErrClosed` | `TestSplitOutputAfterClose` |
 | 分級路由 | info enabler 明確接受 DEBUG 與 INFO | `TestGetSplitCoreRoutesLevels` |
-| Sync 實際下沉 | `SplitOutput.Sync` 同步當前檔案集合；wrapper 委派 | `TestSplitOutputSync` |
+| Sync 實際下沉 | `SplitOutput.Sync` 同步全部檔案；wrapper 只同步自身 level | `TestSplitOutputSync` |
 | 換檔失敗保留舊檔 | 新集合先開啟成功，再交換 | `TestSplitOutputRotationFailureKeepsCurrentFiles` |
 | 文件契約一致 | 同步更新 README、DESIGN、godoc | `rg` 與人工檢查 |
 
@@ -107,7 +107,8 @@
 
 - `Write` 在 mutex 保護下確認未關閉，依 level 選擇目前檔案並同步完成單次寫入。
 - `Sync` 在 mutex 保護下確認未關閉，對三個目前檔案執行 `Sync`，以 `errors.Join` 聚合錯誤。
-- `splitOutputWrapper.Sync` 改為委派 `SplitOutput.Sync`。
+- `splitOutputWrapper.Sync` 只同步自身 level 對應檔案，避免三個 wrapper 各自重複同步全部檔案。
+- `SplitOutput.Sync` 提供直接同步全部目前檔案的能力。
 - 本次維持鎖內同步 I/O；是否拆鎖必須由後續 benchmark spec 決定。
 
 ## Mermaid Diagrams

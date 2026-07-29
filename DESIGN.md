@@ -258,31 +258,39 @@ logs/
 
    ```go
    infoLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-       return lvl == zapcore.InfoLevel
+       return lvl == zapcore.DebugLevel || lvl == zapcore.InfoLevel
    })
    ```
+
+   - DEBUG、INFO 寫入 info 檔
+   - WARN 寫入 warn 檔
+   - ERROR、DPANIC、PANIC、FATAL 寫入 error 檔
 
 2. **每日自動換檔**
 
    - 每天零點自動切換到新檔案
-   - 使用 goroutine 定期檢查
+   - 使用可停止的 timer 與 goroutine 等待下一個換檔時間
+   - `Close` 會停止 timer、等待 goroutine 結束，再關閉檔案
+   - 新檔案未完整開啟時保留既有檔案，避免換檔失敗中斷寫入
    - 注意：這是按日期換檔，不是按大小的 rotation
 
-3. **線程安全**
+3. **並行安全與同步**
    - 使用 `sync.Mutex` 保護檔案操作
-   - 確保併發安全
+   - `Close` 可重複及並行呼叫，底層資源只關閉一次
+   - `Sync` 會將三個目前開啟的檔案同步至儲存裝置
+   - 關閉後的 Write 與 Sync 會回傳包裝 `os.ErrClosed` 的錯誤
 
 ### 7.2 與 timberjack 的差異
 
 | 功能 | split_output.go | timberjack |
 |------|-----------------|------------|
-| 按級別分離 | ✅ info/warn/error 分開檔案 | ❌ 單一檔案 |
-| 每日換檔 | ✅ 每天零點切換 | ✅ RotateAt 支援 |
-| 大小限制 | ❌ 無 | ✅ MaxSize |
-| 時間間隔 | ❌ 無 | ✅ RotationInterval |
-| 備份數量 | ❌ 無 | ✅ MaxBackups |
-| 保存天數 | ❌ 無 | ✅ MaxAge |
-| 壓縮備份 | ❌ 無 | ✅ gzip/zstd |
+| 按級別分離 | 是，info/warn/error 分開檔案 | 否，單一檔案 |
+| 每日換檔 | 是，每天零點切換 | 是，RotateAt 支援 |
+| 大小限制 | 無 | MaxSize |
+| 時間間隔 | 無 | RotationInterval |
+| 備份數量 | 無 | MaxBackups |
+| 保存天數 | 無 | MaxAge |
+| 壓縮備份 | 無 | gzip/zstd |
 
 **使用建議：**
 
@@ -296,7 +304,7 @@ logs/
 
 ### 8.1 設計決策
 
-**zlogger 不內建 log rotation**，理由如下：
+**zlogger 不內建完整 log rotation**，`SplitOutput` 只負責每日換檔。大小限制、備份與壓縮交由外部元件，理由如下：
 
 1. **保持 lib 輕量** - 只依賴 zap
 2. **避免強制依賴** - 不是所有專案都需要

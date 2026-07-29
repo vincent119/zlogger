@@ -5,7 +5,7 @@
 - Draft: 無
 - Type: BugFix
 - Owner: 待確認
-- Status: Planned
+- Status: Complete
 
 ## 文件定位
 
