@@ -191,6 +191,7 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' .specs/2026-
 - 2026-07-29：新目錄／檔案的 group 與 other bits 為 0，既有 0640 檔案 mode 保持且內容可追加。
 - 2026-07-29：完整 race、20 次安全目標、go vet、gofmt 與 golangci-lint 均通過，覆蓋率 92.9%。
 - 2026-07-29：差異限於 Allowed Changes；未修改 go.mod、go.sum、CI 或 `_workspace/`，未執行 commit、push 或發布。
+- 2026-07-29：後續 `os.Root` containment 已由 PR #8 完成並合併為 `4d05e06`；GitHub Actions run `30427993668` 七項檢查全部通過。
 
 ## 驗證結果摘要
 
@@ -204,7 +205,7 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' .specs/2026-
 
 ## 後續改善
 
-- [ ] 升級 go.mod／CI 至 Go 1.25+，改用 os.Root 提供原子 containment
+- [x] 升級 go.mod／CI 至 Go 1.25+，改用 os.Root 提供原子 containment
 - [ ] 釘選 GitHub Actions 與 golangci-lint 版本，加入最小 permissions
 - [ ] 評估可配置 DirPerm／FilePerm functional options
 - [ ] 修正 Context fields defensive copy

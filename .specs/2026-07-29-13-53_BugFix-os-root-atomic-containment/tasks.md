@@ -1,6 +1,6 @@
 # 任務文件：以 os.Root 建立原子檔案 containment
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -131,8 +131,8 @@ Status: InProgress
     - `git diff --check`
     - coverage >= 90%
 
-- [ ] T7 遠端 macOS／Windows 驗收
-  - Status: Pending
+- [x] T7 遠端 macOS／Windows 驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：為通過 CI 修改 workflow、skip 或 sleep
@@ -140,8 +140,8 @@ Status: InProgress
   - Context：經使用者授權 commit／push 後，確認既有七項 CI 全部通過，Windows TempDir cleanup 無 handle regression。
   - Verify：`gh pr checks` 或 `gh run view` 顯示所有 jobs pass
 
-- [ ] T8 回填完成狀態
-  - Status: Pending
+- [x] T8 回填完成狀態
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 spec；前置安全 spec 只更新 os.Root 後續項目
     - Forbidden：其他 spec 或產品碼
@@ -167,7 +167,7 @@ Status: InProgress
   - append、mode、日期與分級檔名不變
   - rotation、level routing、Sync、Close 不變
 
-- [ ] V4 品質與跨平台
+- [x] V4 品質與跨平台
   - Go 1.25.11／1.26.5 race
   - targeted tests `-count=20`
   - fmt、vet、lint、coverage、benchmark
@@ -212,6 +212,8 @@ rg -n '^#|^##|^###|Boundary|Depends|Status|Implementation Notes' .specs/2026-07-
 - 2026-07-29：T6 完成；Go 1.25.11 與 1.26.5 的完整 race 均通過，安全與 rotation 目標測試合併執行 20 次通過。
 - 2026-07-29：`make verify` 通過 fmt-check、vet、golangci-lint v2.12.2、race、92.7% coverage 與 benchmark smoke；`git diff --check` 通過，無測試產物。
 - 2026-07-29：分支差異只包含 Allowed Changes；產品碼已無完整目標路徑 `os.OpenFile` 或舊 opener，未修改 dependency、CI、Makefile、coverage badge 或公開 API。T7 保留等待 commit／push 後的遠端 macOS 15 與 Windows 2025 驗收。
+- 2026-07-29：PR #8 已合併為 `4d05e06`；GitHub Actions run `30427993668` 的七項檢查全部通過，包含 Go 1.25.11／1.26.5 race、macOS 15、Windows 2025、靜態分析、coverage gate 與 benchmark smoke，完成 T7 與 V4。
+- 2026-07-29：完成 T8；requirements 與 tasks 狀態改為 Complete，並回填前置安全 spec 的 `os.Root` 後續項目。產品碼與其他後續改善未修改。
 
 ## 後續改善
 
