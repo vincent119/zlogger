@@ -441,7 +441,10 @@ func NumberCheck(c *gin.Context) {
 ## 按級別分離日誌檔案
 
 ```go
-import "go.uber.org/zap/zapcore"
+import (
+    "go.uber.org/zap"
+    "go.uber.org/zap/zapcore"
+)
 
 // 創建分離輸出的核心
 core, cleanup, err := zlogger.GetSplitCore("./logs", "app", zapcore.EncoderConfig{
@@ -454,7 +457,11 @@ core, cleanup, err := zlogger.GetSplitCore("./logs", "app", zapcore.EncoderConfi
 if err != nil {
     panic(err)
 }
-defer cleanup()
+logger := zap.New(core)
+defer func() {
+    _ = logger.Sync()
+    cleanup()
+}()
 
 // 會產生以下檔案：
 // - logs/app-info-2024-01-01.log
@@ -462,9 +469,17 @@ defer cleanup()
 // - logs/app-error-2024-01-01.log
 ```
 
+級別路由規則：
+
+- DEBUG、INFO 寫入 info 檔
+- WARN 寫入 warn 檔
+- ERROR、DPANIC、PANIC、FATAL 寫入 error 檔
+
+`cleanup` 會等待每日換檔 goroutine 結束並關閉全部檔案。logger 不再使用時，應先呼叫 `Sync`，再執行 `cleanup`；換檔期間若新檔案無法完整開啟，現有檔案會保留並繼續提供寫入。
+
 ## Log Rotation（使用 timberjack）
 
-zlogger 本身不包含 log rotation 功能，建議使用 [timberjack](https://github.com/DeRuina/timberjack) 處理：
+`SplitOutput` 僅提供每日換檔，不包含大小限制、備份數量與壓縮等完整 log rotation 功能。需要這些能力時，建議使用 [timberjack](https://github.com/DeRuina/timberjack) 處理：
 
 ```bash
 go get github.com/DeRuina/timberjack
@@ -582,7 +597,7 @@ zlogger.Init(&zlogger.Config{
 })
 ```
 
-> **Note:** Log rotation（檔案大小限制、備份、壓縮）請使用 timberjack，參考上方範例。
+> **注意：** Log rotation（檔案大小限制、備份、壓縮）請使用 timberjack，參考上方範例。
 
 ## License
 
