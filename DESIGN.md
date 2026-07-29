@@ -27,12 +27,20 @@ zlogger/
 
 ## 2. 配置系統設計
 
-### 2.1 配置結構設計
+### 2.1 完整設定與部分設定
 
 ```go
 type Config struct {
     Level         string   `json:"level" yaml:"level" toml:"level"`
     Format        string   `json:"format" yaml:"format" toml:"format"`
+    // ...
+}
+
+type ConfigPatch struct {
+    Level         *string   `json:"level,omitempty" yaml:"level,omitempty" toml:"level,omitempty"`
+    Format        *string   `json:"format,omitempty" yaml:"format,omitempty" toml:"format,omitempty"`
+    Outputs       *[]string `json:"outputs,omitempty" yaml:"outputs,omitempty" toml:"outputs,omitempty"`
+    ColorEnabled  *bool     `json:"color_enabled,omitempty" yaml:"color_enabled,omitempty" toml:"color_enabled,omitempty"`
     // ...
 }
 ```
@@ -45,11 +53,12 @@ type Config struct {
    - 允許從任何格式的設定檔直接綁定
    - 無需額外轉換層
 
-2. **零值友好設計**
+2. **三態部分設定**
 
-   - 使用 `Merge()` 方法合併配置
-   - 零值不覆蓋預設值（string 空字串、int 0、slice nil）
-   - bool 類型直接覆蓋（因為 false 也是有效值）
+   - `ConfigPatch` 以 pointer 區分未提供與明確零值
+   - `Resolve()` 以 `DefaultConfig()` 為基底，正規化並嚴格驗證
+   - Outputs 在輸入與輸出邊界複製，避免共享可變 slice
+   - 既有 `Config.Merge()` 只保留來源碼相容，新程式不應使用
 
 3. **預設配置**
    - `DefaultConfig()` 提供合理的預設值
@@ -58,40 +67,42 @@ type Config struct {
 **使用範例：**
 
 ```go
-// 方式 1: 使用預設配置
-zlogger.Init(nil)
+// 方式 1：使用預設設定
+cleanup, err := zlogger.Configure(nil)
 
-// 方式 2: 部分自定義
-cfg := &zlogger.Config{Level: "debug"}
-zlogger.Init(cfg)
+// 方式 2：部分自定義
+level := "debug"
+cleanup, err := zlogger.Configure(&zlogger.ConfigPatch{Level: &level})
 
-// 方式 3: 從 YAML 綁定
+// 方式 3：從 YAML 綁定
 type AppConfig struct {
-    Log zlogger.Config `yaml:"log"`
+    Log zlogger.ConfigPatch `yaml:"log"`
 }
-zlogger.Init(&appConfig.Log)
+cleanup, err := zlogger.Configure(&appConfig.Log)
 ```
 
 ---
 
 ## 3. 初始化設計
 
-### 3.1 單例模式
+### 3.1 全域設定狀態
 
 ```go
 var (
     globalLogger *zap.Logger
-    once         sync.Once
     zapGlobalLevel = zap.NewAtomicLevel()
+    configureMu sync.Mutex
+    configured bool
 )
 ```
 
 **設計要點：**
 
-1. **sync.Once 保證只初始化一次**
+1. **成功後只設定一次**
 
-   - 避免重複初始化造成資源浪費
-   - 線程安全
+   - mutex 保護設定與發布狀態
+   - 建構失敗後回到未設定狀態，可修正後重試
+   - 成功後再次設定回傳 `ErrAlreadyConfigured`
 
 2. **全局 Logger 實例**
 
@@ -105,14 +116,14 @@ var (
 ### 3.2 初始化流程
 
 ```bash
-Init(cfg)
-  └─> once.Do(initLogger)
-      ├─> DefaultConfig().Merge(cfg)  # 合併配置
-      ├─> parseLevel()                # 解析級別
-      ├─> buildConsoleCore()          # 建立控制台輸出
-      ├─> buildFileCore()             # 建立檔案輸出
-      ├─> zapcore.NewTee()           # 合併多個輸出
-      └─> zap.ReplaceGlobals()        # 替換全局 logger
+Configure(patch)
+  ├─> ConfigPatch.Resolve()         # 套用預設、正規化、驗證
+  ├─> New(cfg)                      # 建立 Instance，不修改全域狀態
+  │   ├─> buildConsoleCore()        # 建立控制台輸出
+  │   ├─> buildFileCore()           # 建立檔案輸出與 owned resources
+  │   └─> zapcore.NewTee()          # 合併多個輸出
+  ├─> publish                       # 完整成功後才發布全域 logger
+  └─> cleanup                       # 回復 zap globals 並關閉 owned resources
 ```
 
 **設計特點：**
@@ -121,6 +132,9 @@ Init(cfg)
 - 使用 `zapcore.NewTee()` 同時輸出到多個目標
 - 自動建立日誌目錄
 - 檔案名稱支援日期格式
+- 設定與 I/O 錯誤直接回傳，不在安全入口 panic
+- `Instance.Close()` 可重複及並行呼叫
+- 呼叫端應先執行 `Sync()`，再執行 cleanup
 
 ---
 
@@ -344,9 +358,9 @@ if err := os.MkdirAll(logDir, 0755); err != nil {
 
 **理由：**
 
-- 日誌系統是基礎設施，初始化失敗應立即停止程式
-- 避免程式在沒有日誌的情況下運行
-- 簡化 API（`Init()` 無需返回錯誤）
+- 安全入口回傳設定與 I/O 錯誤，由應用程式啟動邊界決定是否終止
+- 建構失敗不發布半初始化 logger，並回收已建立資源
+- 既有 `Init()` 只作 deprecated 相容層，其他錯誤維持 legacy panic 行為
 
 ### 9.2 運行時錯誤
 
@@ -407,9 +421,9 @@ func WithOptions(opts ...zap.Option) *Logger
 - Context 字段合併使用 `make()` 預分配容量
 - 避免不必要的字串操作
 
-### 11.2 延遲初始化
+### 11.2 受控初始化
 
-- 使用 `sync.Once` 確保只初始化一次
+- 使用 mutex 狀態確保只成功初始化一次，且失敗後可重試
 - 全局 logger 使用指針，避免複製開銷
 
 ---
@@ -420,7 +434,7 @@ func WithOptions(opts ...zap.Option) *Logger
 
 - **單一 Package**：所有功能在 `zlogger` 下
 - **統一命名**：函數名稱清晰一致
-- **零配置可用**：`Init(nil)` 即可使用
+- **零配置可用**：`Configure(nil)` 即可使用，並回傳 error 與 cleanup
 
 ### 12.2 靈活性
 
@@ -446,7 +460,7 @@ func WithOptions(opts ...zap.Option) *Logger
 
 | 特性     | zap          | zlogger                     |
 | -------- | ------------ | --------------------------- |
-| 初始化   | 需要手動配置 | `Init(cfg)` 一鍵初始化      |
+| 初始化   | 需要手動配置 | `Configure(patch)` 安全初始化 |
 | 配置     | 程式碼配置   | 支援設定檔綁定              |
 | Context  | 需手動處理   | 自動合併 context 字段       |
 | 全局函數 | 無           | 提供 `Info()`, `Error()` 等 |
