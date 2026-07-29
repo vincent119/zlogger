@@ -1,6 +1,6 @@
 # 任務文件：修正 Windows 測試檔案 handle 洩漏
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -46,8 +46,8 @@ Status: InProgress
 | T2 修正 global init 測試 cleanup | T1 | Complete | targeted 20 次通過 |
 | T3 修正 buildFileCore ownership | T1 | Complete | 四個 owner 均註冊 cleanup |
 | T4 本機回歸與穩定性 | T2、T3 | Complete | 兩版 race、20 次、verify 通過 |
-| T5 遠端 Windows 驗收 | T4 | Pending | 必須實際 push |
-| T6 回填兩份 spec 狀態 | T5 | Pending | Windows green 後執行 |
+| T5 遠端 Windows 驗收 | T4 | Complete | PR #5 七項檢查通過 |
+| T6 回填兩份 spec 狀態 | T5 | Complete | 本 spec 與前置 CI T9 已完成 |
 
 ## 實作任務
 
@@ -87,8 +87,8 @@ Status: InProgress
   - Context：執行 targeted 20 次、Go 1.25.11／1.26.5 race、make verify、lint 與 diff boundary。
   - Verify：所有命令通過；coverage >= 90%；無 workflow、module 或 dependency diff
 
-- [ ] T5 遠端 Windows 2025 驗收
-  - Status: Pending
+- [x] T5 遠端 Windows 2025 驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：為通過 CI 修改 workflow 或加平台 skip
@@ -96,8 +96,8 @@ Status: InProgress
   - Context：經使用者授權 commit／push 後，確認 Windows 2025 portability job 實際執行七個測試並通過；macOS 與其他 jobs 也需 green。
   - Verify：`gh pr checks` 或 `gh run view` 顯示所有 jobs pass
 
-- [ ] T6 回填 spec 完成狀態
-  - Status: Pending
+- [x] T6 回填 spec 完成狀態
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks、requirements；前置 CI tasks 的 T9 與狀態
     - Forbidden：其他 spec 內容與產品碼
@@ -125,7 +125,7 @@ Status: InProgress
   - workflow、module、dependency 與公開 API 不變
   - 每個新 file owner 都有對應 cleanup
 
-- [ ] V4 遠端跨平台
+- [x] V4 遠端跨平台
   - Windows 2025 pass
   - macOS 15 pass
   - race、lint、coverage、benchmark jobs pass
@@ -159,7 +159,9 @@ rg -n '^#|^##|^###|Boundary|Depends|Status|Implementation Notes' .specs/2026-07-
 - 2026-07-29：T4 完成；七個目標測試合併執行 20 次通過，Go 1.25.11 與 1.26.5 的 `go test -race -count=1 ./...` 均通過。
 - 2026-07-29：`make verify` 通過 fmt-check、vet、golangci-lint v2.12.2、race、92.9% coverage 與 benchmark smoke；`git diff --check` 通過，未修改 workflow、module、dependency、Makefile 或公開 API。
 - 2026-07-29：清除 `coverage.out` 後，`make clean` 的 `go clean` 因 sandbox 無權存取使用者 Go build cache 而結束；測試產物已移除，此環境限制不影響 T4 驗證結果。
+- 2026-07-29：PR #5 已合併；GitHub Actions run 30425988956 的七項檢查全部通過。Windows 2025 job 90492470365 實際執行完成並通過，macOS 15、兩版 race、lint、coverage 與 benchmark 也全部通過。
+- 2026-07-29：T5、T6 與 V4 完成，並回填前置 Go 工具鏈 CI spec 的 T9 與整體 tasks 狀態。
 
 ## 後續改善
 
-- [ ] 本 spec 與前置 CI T9 完成後，再建立 os.Root 原子 containment spec
+- [ ] 另行建立 os.Root 原子 containment spec

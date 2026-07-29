@@ -1,6 +1,6 @@
 # 任務文件：建立 Go 工具鏈與 CI 品質基線
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -59,7 +59,7 @@ Status: InProgress
 | T5 新增關鍵路徑 benchmark | T2 | Complete | 無外部 I/O |
 | T6 重建 GitHub Actions workflow | T3、T4、T5 | Complete | 靜態驗證完成，待遠端執行 |
 | T7 更新 README 與 DESIGN | T2 至 T6 | Complete | 未宣稱已採用 os.Root |
-| T8 完整驗證與邊界檢查 | T1 至 T7 | InProgress | 本機完成，待遠端跨平台 CI |
+| T8 完整驗證與邊界檢查 | T1 至 T7 | Complete | 本機與遠端跨平台 CI 全部通過 |
 
 ## 實作任務
 
@@ -126,7 +126,7 @@ Status: InProgress
   - Go 1.26.5：`go test -race -count=1 ./...`
   - 兩者均記錄 `go version` 與 GOOS／GOARCH
 
-- [ ] T9 跨平台與品質閘門
+- [x] T9 跨平台與品質閘門
   - macOS 15／Windows 2025：Go 1.26.5 `go test -count=1 ./...`
   - `make fmt-check`
   - `go vet ./...`
@@ -188,6 +188,7 @@ rg -n '^#|^##|^###|Boundary|Depends|Status|Implementation Notes' .specs/2026-07-
 - 2026-07-29：本機 `make verify` 通過；Go 1.25.11 darwin/arm64 與 Go 1.26.5 darwin/arm64 的 race 均通過。
 - 2026-07-29：固定 benchstat 以每組 10 次樣本比較：disabled 路徑無顯著差異；fields 路徑 Go 1.26.5 為 -29.26% sec/op；B/op 與 allocs/op 均不變。樣本執行時間變異偏高，但沒有超過 10% 的退化證據。
 - 2026-07-29：T8 的 Go 1.25.11／1.26.5 race 與 T11 的安全、依賴、diff、產物及變更邊界檢查均完成；T9 保留等待 push 後的 GitHub-hosted macOS 15／Windows 2025 實際執行。
+- 2026-07-29：PR #5 的 GitHub Actions run 30425988956 七項檢查全部通過；Windows 2025 job 90492470365、macOS 15、Go 1.25.11／1.26.5 race、lint、coverage 與 benchmark 均完成。T9 與本 tasks 狀態更新為 Complete。
 
 ## 後續改善
 
