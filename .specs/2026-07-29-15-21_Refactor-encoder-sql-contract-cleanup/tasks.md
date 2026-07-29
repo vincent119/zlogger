@@ -1,6 +1,6 @@
 # 任務文件：Encoder 契約與 SQL dead code 清理
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -50,8 +50,8 @@ Status: InProgress
 | T3 移除 SQL dead code 與專屬 tests | T2 | Complete | private symbols 與專屬 tests 已移除 |
 | T4 修正 DESIGN 契約 | T2、T3 | Complete | DESIGN 已改為 encoder ownership 與資料保真 |
 | T5 本機完整驗證與邊界檢查 | T3、T4 | Complete | 兩版 race、20 次、verify、92.8% coverage |
-| T6 遠端跨平台驗收 | T5 | Planned | 七項既有 CI 必須全綠 |
-| T7 回填完成狀態 | T6 | Planned | 本 spec 與前置待辦結案 |
+| T6 遠端跨平台驗收 | T5 | Complete | PR #12 的七項 CI 全部通過 |
+| T7 回填完成狀態 | T6 | Complete | 本 spec 與前置待辦已結案 |
 
 ## 實作任務
 
@@ -119,8 +119,8 @@ Status: InProgress
     - `git diff --stat`
     - `git diff --check`
 
-- [ ] T6 遠端跨平台驗收
-  - Status: Planned
+- [x] T6 遠端跨平台驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：workflow、skip、sleep、平台專用繞過
@@ -128,8 +128,8 @@ Status: InProgress
   - Context：commit／push 需使用者另行授權；PR 建立後確認兩版 race、macOS、Windows、lint、coverage 與 benchmark 七項 CI。
   - Verify：`gh pr checks` 或 `gh run view` 顯示七項 jobs 全部 pass
 
-- [ ] T7 回填完成狀態
-  - Status: Planned
+- [x] T7 回填完成狀態
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 spec；前置安全 spec 只更新 encoder／SQL 後續項目
     - Forbidden：其他後續待辦、產品碼或工具設定
@@ -161,7 +161,7 @@ Status: InProgress
   - 無 dependency、CI、Makefile、README 或其他產品碼變更
   - `git diff --check` 通過
 
-- [ ] V5 遠端驗收
+- [x] V5 遠端驗收
   - Go 1.25.11／1.26.5 race 通過
   - macOS 15／Windows 2025 通過
   - 靜態分析、coverage gate、benchmark smoke 通過
@@ -198,13 +198,15 @@ rg -n "^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:" .specs/2026-
 - 2026-07-29：T5 的 Go 1.25.11 與 Go 1.26.5 完整 race 均通過，encoder behavior／compatibility selectors 連續 20 次通過。
 - 2026-07-29：`make verify GOLANGCI_LINT=/private/tmp/zlogger-tools/golangci-lint` 使用固定 v2.12.2 通過 fmt-check、vet、lint 0 issues、race、92.8% coverage gate 與 benchmark smoke；coverage 產物已由 `make clean` 移除。
 - 2026-07-29：`git diff --check` 通過；差異只包含 encoder、指定 SQL dead code/tests、DESIGN 第 6 節／SQL row 與本 spec，未修改 dependency、CI、Makefile、README 或 Boundary 外產品碼。T6 保留等待 commit／push 後的遠端驗收。
+- 2026-07-29：PR #12 已合併為 `f7ae8f6`；GitHub Actions run `30432312003` 的七項檢查全部通過，包含 Go 1.25.11／1.26.5 race、macOS 15、Windows 2025、靜態分析、coverage gate 與 benchmark smoke，完成 T6 與 V5。
+- 2026-07-29：完成 T7；requirements 與 tasks 狀態改為 Complete，並回填前置安全 spec 的 encoder／SQL 後續項目。產品碼與其他後續改善未修改。
 
 ## 驗證結果摘要
 
 - 新行為驗證：通過；HTML 字元、zap parity、identity no-op、nil-safe 與 20 次穩定性均通過
 - 回歸驗證：通過；Go 1.25.11／1.26.5 完整 race 與 `make verify` 通過
 - 文件一致性：已移除錯誤 SQL 宣稱，DESIGN 與 deprecated godoc 對應實作
-- 剩餘風險：deprecated API 需到未來 major version 才能移除；遠端跨平台驗收待 commit／push
+- 剩餘風險：deprecated API 需到未來 major version 才能移除
 
 ## 後續改善
 
