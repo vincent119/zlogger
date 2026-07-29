@@ -20,33 +20,80 @@ go get github.com/vincent119/zlogger
 ## 基本使用
 
 ```go
-import "github.com/vincent119/zlogger"
+import (
+	"log"
+
+	"github.com/vincent119/zlogger"
+)
 
 func main() {
-    // 使用預設配置初始化
-    zlogger.Init(nil)
-    defer zlogger.Sync()
+	cleanup, err := zlogger.Configure(nil)
+	if err != nil {
+		log.Fatalf("初始化 logger 失敗：%v", err)
+	}
+	defer func() {
+		if err := cleanup(); err != nil {
+			log.Printf("關閉 logger 失敗：%v", err)
+		}
+	}()
 
-    // 記錄日誌
-    zlogger.Info("Hello", zlogger.String("key", "value"))
-    zlogger.Debug("除錯訊息", zlogger.Int("count", 42))
-    zlogger.Error("錯誤", zlogger.Err(err))
+	zlogger.Info("服務啟動", zlogger.String("key", "value"))
+	zlogger.Debug("除錯訊息", zlogger.Int("count", 42))
+
+	if err := zlogger.Sync(); err != nil {
+		log.Printf("同步 logger 失敗：%v", err)
+	}
 }
 ```
 
 ## 自定義配置
 
 ```go
-cfg := &zlogger.Config{
-    Level:       "debug",
-    Format:      "json",
-    Outputs:     []string{"console", "file"},
-    LogPath:     "./logs",
-    FileName:    "app.log",
-    AddCaller:   true,
-    Development: true,
+level := "debug"
+format := "json"
+outputs := []string{"console", "file"}
+logPath := "./logs"
+fileName := "app.log"
+development := true
+
+cleanup, err := zlogger.Configure(&zlogger.ConfigPatch{
+	Level:       &level,
+	Format:      &format,
+	Outputs:     &outputs,
+	LogPath:     &logPath,
+	FileName:    &fileName,
+	Development: &development,
+})
+if err != nil {
+	return fmt.Errorf("設定 logger: %w", err)
 }
-zlogger.Init(cfg)
+defer func() {
+	if err := cleanup(); err != nil {
+		log.Printf("關閉 logger 失敗：%v", err)
+	}
+}()
+```
+
+`ConfigPatch` 以 pointer 區分「未提供」與明確零值。例如只提供 `Level` 時，
+`AddCaller=true` 與 `ColorEnabled=true` 會保留；明確提供 `false` 時才會關閉。
+
+若不需要全域 logger，可直接持有具名生命週期：
+
+```go
+instance, err := zlogger.New(zlogger.DefaultConfig())
+if err != nil {
+	return fmt.Errorf("建立 logger: %w", err)
+}
+defer func() {
+	if err := instance.Close(); err != nil {
+		log.Printf("關閉 logger 失敗：%v", err)
+	}
+}()
+
+instance.Logger().Info("服務啟動")
+if err := instance.Sync(); err != nil {
+	return fmt.Errorf("同步 logger: %w", err)
+}
 ```
 
 ## 從設定檔載入
@@ -71,14 +118,29 @@ log:
 
 ```go
 type AppConfig struct {
-    Log zlogger.Config `yaml:"log"`
+	Log zlogger.ConfigPatch `yaml:"log"`
 }
 
 // 載入設定後
 var appConfig AppConfig
 // ... 載入 YAML ...
-zlogger.Init(&appConfig.Log)
+cleanup, err := zlogger.Configure(&appConfig.Log)
+if err != nil {
+	return fmt.Errorf("設定 logger: %w", err)
+}
+defer func() {
+	if err := cleanup(); err != nil {
+		log.Printf("關閉 logger 失敗：%v", err)
+	}
+}()
 ```
+
+`Configure` 會先完成嚴格驗證，再建立任何目錄或檔案。未知 Level、Format、
+Output、重複 Output，以及 file output 明確使用空白 LogPath 都會回傳
+`ErrInvalidConfig`。初始化失敗不會發布半成品，修正設定後可再次呼叫。
+
+既有 `Init(*Config)` 保留來源碼相容，但無法回傳設定或 I/O 錯誤，且
+`Config` 的 bool 無法區分未提供與 `false`。新程式應使用 `Configure`。
 
 ### JSON 範例
 
@@ -588,12 +650,10 @@ zap.ReplaceGlobals(logger)
 | ERROR/FATAL | 紅色   |
 
 ```go
-// 啟用顏色（預設）
-zlogger.Init(nil)
-
-// 禁用顏色（輸出到檔案或 CI 環境時建議禁用）
-zlogger.Init(&zlogger.Config{
-    ColorEnabled: false,
+// 未提供 ColorEnabled 時會使用預設 true；以下範例明確禁用顏色。
+disabled := false
+cleanup, err := zlogger.Configure(&zlogger.ConfigPatch{
+	ColorEnabled: &disabled,
 })
 ```
 

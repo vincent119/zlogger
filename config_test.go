@@ -1,6 +1,7 @@
 package zlogger
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -151,5 +152,130 @@ func TestConfigMerge_AllFields(t *testing.T) {
 	}
 	if !result.Development {
 		t.Error("expected Development true")
+	}
+}
+
+func TestConfigPatchResolvePreservesDefaults(t *testing.T) {
+	level := "DEBUG"
+	patch := &ConfigPatch{Level: &level}
+
+	cfg, err := patch.Resolve()
+	if err != nil {
+		t.Fatalf("解析部分設定失敗：%v", err)
+	}
+
+	if cfg.Level != "debug" {
+		t.Errorf("Level = %q，預期為 debug", cfg.Level)
+	}
+	if !cfg.AddCaller {
+		t.Error("未提供 AddCaller 時應保留預設 true")
+	}
+	if !cfg.ColorEnabled {
+		t.Error("未提供 ColorEnabled 時應保留預設 true")
+	}
+}
+
+func TestConfigPatchResolveExplicitFalse(t *testing.T) {
+	disabled := false
+	patch := &ConfigPatch{
+		AddCaller:    &disabled,
+		ColorEnabled: &disabled,
+	}
+
+	cfg, err := patch.Resolve()
+	if err != nil {
+		t.Fatalf("解析部分設定失敗：%v", err)
+	}
+
+	if cfg.AddCaller {
+		t.Error("明確提供 AddCaller=false 時不應保留預設值")
+	}
+	if cfg.ColorEnabled {
+		t.Error("明確提供 ColorEnabled=false 時不應保留預設值")
+	}
+}
+
+func TestConfigPatchResolveCopiesOutputs(t *testing.T) {
+	outputs := []string{"CONSOLE", "FILE"}
+	patch := &ConfigPatch{Outputs: &outputs}
+
+	cfg, err := patch.Resolve()
+	if err != nil {
+		t.Fatalf("解析部分設定失敗：%v", err)
+	}
+
+	outputs[0] = "changed-source"
+	if cfg.Outputs[0] != "console" {
+		t.Fatalf("結果與來源共享 slice：%v", cfg.Outputs)
+	}
+
+	cfg.Outputs[1] = "changed-result"
+	if (*patch.Outputs)[1] != "FILE" {
+		t.Fatalf("來源與結果共享 slice：%v", *patch.Outputs)
+	}
+}
+
+func TestConfigPatchResolveUsesDefaultLogPathWhenOmitted(t *testing.T) {
+	outputs := []string{"file"}
+	patch := &ConfigPatch{Outputs: &outputs}
+
+	cfg, err := patch.Resolve()
+	if err != nil {
+		t.Fatalf("解析部分設定失敗：%v", err)
+	}
+	if cfg.LogPath != "./logs" {
+		t.Errorf("LogPath = %q，預期為 ./logs", cfg.LogPath)
+	}
+}
+
+func TestConfigValidateRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *Config
+	}{
+		{
+			name: "未知 Level",
+			cfg:  &Config{Level: "trace", Format: "console", Outputs: []string{"console"}, LogPath: "./logs"},
+		},
+		{
+			name: "未知 Format",
+			cfg:  &Config{Level: "info", Format: "xml", Outputs: []string{"console"}, LogPath: "./logs"},
+		},
+		{
+			name: "空 Outputs",
+			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{}, LogPath: "./logs"},
+		},
+		{
+			name: "未知 Output",
+			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{"stderr"}, LogPath: "./logs"},
+		},
+		{
+			name: "重複 Output",
+			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{"console", "console"}, LogPath: "./logs"},
+		},
+		{
+			name: "file 的 LogPath 空白",
+			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{"file"}, LogPath: ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("錯誤 = %v，預期可由 errors.Is 判斷為 ErrInvalidConfig", err)
+			}
+		})
+	}
+}
+
+func TestConfigPatchResolveRejectsExplicitEmptyLogPath(t *testing.T) {
+	outputs := []string{"file"}
+	logPath := ""
+	patch := &ConfigPatch{Outputs: &outputs, LogPath: &logPath}
+
+	_, err := patch.Resolve()
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("錯誤 = %v，預期可由 errors.Is 判斷為 ErrInvalidConfig", err)
 	}
 }

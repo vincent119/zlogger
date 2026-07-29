@@ -2,7 +2,10 @@ package zlogger
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -62,11 +65,23 @@ func TestProcessSQLString(t *testing.T) {
 	}
 }
 
-// Reset global state for testing
+// resetGlobalState 隔離會修改全域 logger 的測試。
 func resetGlobalState() {
+	configureMu.Lock()
+	cleanup := globalCleanup
+	configureMu.Unlock()
+	if cleanup != nil {
+		_ = cleanup()
+	}
+
+	configureMu.Lock()
 	globalLogger = nil
 	globalConfig = nil
-	once = sync.Once{}
+	zapGlobalLevel = zap.NewAtomicLevel()
+	configured = false
+	globalCleanup = nil
+	configureMu.Unlock()
+	zap.ReplaceGlobals(zap.NewNop())
 }
 
 func TestInit_WithNilConfig(t *testing.T) {
@@ -657,4 +672,256 @@ func TestBuildFileCore_EmptyLogPath(t *testing.T) {
 
 	// Cleanup
 	_ = os.RemoveAll("./logs")
+}
+
+func TestNewReturnsFileOpenError(t *testing.T) {
+	tmpDir := t.TempDir()
+	notDirectory := filepath.Join(tmpDir, "not-directory")
+	if err := os.WriteFile(notDirectory, []byte("content"), 0o600); err != nil {
+		t.Fatalf("建立測試檔案失敗：%v", err)
+	}
+
+	cfg := &Config{
+		Level:   "info",
+		Format:  "json",
+		Outputs: []string{"file"},
+		LogPath: filepath.Join(notDirectory, "logs"),
+	}
+
+	instance, err := New(cfg)
+	if err == nil {
+		t.Fatal("預期建立 file logger 失敗")
+	}
+	if instance != nil {
+		t.Fatal("建構失敗時不應回傳部分 Instance")
+	}
+}
+
+func TestNewReturnsInvalidConfigBeforeIO(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "不應建立")
+	cfg := &Config{
+		Level:   "trace",
+		Format:  "json",
+		Outputs: []string{"file"},
+		LogPath: logPath,
+	}
+
+	instance, err := New(cfg)
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("錯誤 = %v，預期 ErrInvalidConfig", err)
+	}
+	if instance != nil {
+		t.Fatal("設定無效時不應回傳部分 Instance")
+	}
+	if _, statErr := os.Stat(logPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("驗證失敗前不應建立目錄，Stat 錯誤 = %v", statErr)
+	}
+}
+
+func TestNewDoesNotMutateConfig(t *testing.T) {
+	cfg := &Config{
+		Level:        "DEBUG",
+		Format:       "JSON",
+		Outputs:      []string{"FILE"},
+		LogPath:      t.TempDir(),
+		ColorEnabled: false,
+	}
+
+	instance, err := New(cfg)
+	if err != nil {
+		t.Fatalf("建立 Instance 失敗：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := instance.Close(); err != nil {
+			t.Errorf("關閉 Instance 失敗：%v", err)
+		}
+	})
+
+	if cfg.Level != "DEBUG" || cfg.Format != "JSON" || cfg.Outputs[0] != "FILE" {
+		t.Fatalf("New 不應修改輸入 Config：%+v", cfg)
+	}
+}
+
+func TestNewRollsBackResourcesInReverseOrder(t *testing.T) {
+	firstErr := errors.New("第一個關閉錯誤")
+	secondErr := errors.New("第二個關閉錯誤")
+	order := make([]string, 0, 2)
+	closers := []io.Closer{
+		&recordingCloser{name: "first", order: &order, err: firstErr},
+		&recordingCloser{name: "second", order: &order, err: secondErr},
+	}
+
+	err := closeOwnedResources(closers, "回收 logger 資源")
+	if !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
+		t.Fatalf("回滾錯誤未保留完整錯誤鏈：%v", err)
+	}
+	if len(order) != 2 || order[0] != "second" || order[1] != "first" {
+		t.Fatalf("資源關閉順序 = %v，預期為 [second first]", order)
+	}
+}
+
+func TestNewCleanupIsConcurrentAndIdempotent(t *testing.T) {
+	cfg := &Config{
+		Level:    "debug",
+		Format:   "json",
+		Outputs:  []string{"file"},
+		LogPath:  t.TempDir(),
+		FileName: "instance.log",
+	}
+
+	instance, err := New(cfg)
+	if err != nil {
+		t.Fatalf("建立 Instance 失敗：%v", err)
+	}
+	instance.Logger().Info("cleanup 測試")
+	if err := instance.Sync(); err != nil {
+		t.Fatalf("同步 Instance 失敗：%v", err)
+	}
+
+	const callers = 8
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- instance.Close()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for closeErr := range errs {
+		if closeErr != nil {
+			t.Errorf("Close 回傳非預期錯誤：%v", closeErr)
+		}
+	}
+	if err := instance.Sync(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("關閉後 Sync 錯誤 = %v，預期包裝 os.ErrClosed", err)
+	}
+}
+
+func TestConfigureCanRetryAfterFailure(t *testing.T) {
+	resetGlobalState()
+	t.Cleanup(resetGlobalState)
+
+	tmpDir := t.TempDir()
+	notDirectory := filepath.Join(tmpDir, "not-directory")
+	if err := os.WriteFile(notDirectory, []byte("content"), 0o600); err != nil {
+		t.Fatalf("建立測試檔案失敗：%v", err)
+	}
+	outputs := []string{"file"}
+	badPath := filepath.Join(notDirectory, "logs")
+
+	cleanup, err := Configure(&ConfigPatch{Outputs: &outputs, LogPath: &badPath})
+	if err == nil {
+		t.Fatal("第一次 Configure 預期失敗")
+	}
+	if cleanup != nil {
+		t.Fatal("Configure 失敗時不應回傳 cleanup")
+	}
+	if GetLogger() != nil {
+		t.Fatal("Configure 失敗時不應發布半初始化 logger")
+	}
+
+	cleanup, err = Configure(nil)
+	if err != nil {
+		t.Fatalf("修正設定後 Configure 應可重試：%v", err)
+	}
+	if GetLogger() == nil {
+		t.Fatal("Configure 成功後應發布全域 logger")
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("清理全域 logger 失敗：%v", err)
+	}
+}
+
+func TestConfigureRejectsSecondSuccess(t *testing.T) {
+	resetGlobalState()
+	t.Cleanup(resetGlobalState)
+
+	cleanup, err := Configure(nil)
+	if err != nil {
+		t.Fatalf("第一次 Configure 失敗：%v", err)
+	}
+	first := GetLogger()
+
+	secondCleanup, err := Configure(nil)
+	if !errors.Is(err, ErrAlreadyConfigured) {
+		t.Fatalf("第二次 Configure 錯誤 = %v，預期 ErrAlreadyConfigured", err)
+	}
+	if secondCleanup != nil {
+		t.Fatal("第二次 Configure 不應回傳 cleanup")
+	}
+	if GetLogger() != first {
+		t.Fatal("第二次 Configure 不應替換已發布 logger")
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("清理全域 logger 失敗：%v", err)
+	}
+}
+
+func TestConfigureConcurrent(t *testing.T) {
+	resetGlobalState()
+	t.Cleanup(resetGlobalState)
+
+	const callers = 8
+	type result struct {
+		cleanup func() error
+		err     error
+	}
+	results := make(chan result, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cleanup, err := Configure(nil)
+			results <- result{cleanup: cleanup, err: err}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	var success int
+	var cleanup func() error
+	for result := range results {
+		if result.err == nil {
+			success++
+			cleanup = result.cleanup
+			continue
+		}
+		if !errors.Is(result.err, ErrAlreadyConfigured) {
+			t.Errorf("競爭 Configure 回傳非預期錯誤：%v", result.err)
+		}
+	}
+	if success != 1 {
+		t.Fatalf("成功次數 = %d，預期為 1", success)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("清理全域 logger 失敗：%v", err)
+	}
+}
+
+func TestLegacyInitCompatibility(t *testing.T) {
+	resetGlobalState()
+	t.Cleanup(resetGlobalState)
+
+	Init(nil)
+	if GetLogger() == nil {
+		t.Fatal("Init(nil) 應維持既有初始化行為")
+	}
+
+	Init(nil)
+}
+
+type recordingCloser struct {
+	name  string
+	order *[]string
+	err   error
+}
+
+func (c *recordingCloser) Close() error {
+	*c.order = append(*c.order, c.name)
+	return c.err
 }

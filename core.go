@@ -1,8 +1,12 @@
 package zlogger
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -12,24 +16,80 @@ import (
 )
 
 var (
-	// globalLogger is the global logger instance
-	globalLogger *zap.Logger
-	once         sync.Once
-	// zapGlobalLevel is the global log level, supports dynamic modification
+	// ErrAlreadyConfigured 表示全域 logger 已完成一次成功設定。
+	ErrAlreadyConfigured = errors.New("全域 logger 已完成設定")
+
+	globalLogger   *zap.Logger
 	zapGlobalLevel = zap.NewAtomicLevel()
-	// globalConfig stores the current configuration
-	globalConfig *Config
+	globalConfig   *Config
+
+	configureMu   sync.Mutex
+	configured    bool
+	globalCleanup func() error
 )
 
-// Field is an alias for zap.Field for convenience
+// Field 是 zap.Field 的別名。
 type Field = zap.Field
 
-// sqlProcessingCore is a core wrapper that processes SQL fields
+// Instance 持有非全域 logger 與其擁有的資源。
+type Instance struct {
+	logger  *zap.Logger
+	level   zap.AtomicLevel
+	closers []io.Closer
+
+	mu        sync.RWMutex
+	closed    bool
+	closeOnce sync.Once
+	closeErr  error
+}
+
+// Logger 回傳底層 zap logger。
+// 呼叫端不得在 Close 後繼續使用回傳值。
+func (i *Instance) Logger() *zap.Logger {
+	if i == nil {
+		return nil
+	}
+	return i.logger
+}
+
+// Sync 將目前 Instance 的緩衝資料同步至輸出。
+func (i *Instance) Sync() error {
+	if i == nil {
+		return nil
+	}
+
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	if i.closed {
+		return fmt.Errorf("同步 logger instance: %w", os.ErrClosed)
+	}
+	return i.logger.Sync()
+}
+
+// Close 關閉 Instance 擁有的資源，且可安全重複及並行呼叫。
+func (i *Instance) Close() error {
+	if i == nil {
+		return nil
+	}
+
+	i.closeOnce.Do(func() {
+		i.mu.Lock()
+		i.closed = true
+		closers := slices.Clone(i.closers)
+		i.mu.Unlock()
+
+		i.closeErr = closeOwnedResources(closers, "關閉 logger 資源")
+	})
+
+	return i.closeErr
+}
+
+// sqlProcessingCore 會處理 SQL 欄位中的跳脫字元。
 type sqlProcessingCore struct {
 	zapcore.Core
 }
 
-// With implements zapcore.Core interface
+// With 實作 zapcore.Core。
 func (c *sqlProcessingCore) With(fields []zapcore.Field) zapcore.Core {
 	for i := range fields {
 		if fields[i].Key == "sql" && fields[i].Type == zapcore.StringType {
@@ -39,7 +99,7 @@ func (c *sqlProcessingCore) With(fields []zapcore.Field) zapcore.Core {
 	return &sqlProcessingCore{Core: c.Core.With(fields)}
 }
 
-// Check implements zapcore.Core interface
+// Check 實作 zapcore.Core。
 func (c *sqlProcessingCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
 	if c.Enabled(ent.Level) {
 		return ce.AddCore(ent, c)
@@ -47,7 +107,7 @@ func (c *sqlProcessingCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *
 	return ce
 }
 
-// Write implements zapcore.Core interface
+// Write 實作 zapcore.Core。
 func (c *sqlProcessingCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 	ent.Message = strings.ReplaceAll(ent.Message, "\\", "")
 
@@ -60,31 +120,149 @@ func (c *sqlProcessingCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 	return c.Core.Write(ent, fields)
 }
 
-// Init initializes the logging system with the provided configuration
-func Init(cfg *Config) {
-	once.Do(func() {
-		initLogger(cfg)
-	})
-}
-
-// initLogger is the actual initialization logic
-func initLogger(cfg *Config) {
-	// Merge with default config
-	globalConfig = DefaultConfig().Merge(cfg)
-
-	// Set log level
-	logLevel := parseLevel(globalConfig.Level)
-	zapGlobalLevel.SetLevel(logLevel)
-
-	// Configure encoder - decide whether to use colors based on settings
-	var levelEncoder zapcore.LevelEncoder
-	if globalConfig.ColorEnabled {
-		levelEncoder = zapcore.CapitalColorLevelEncoder // with color
+// New 建立不修改全域狀態的 logger Instance。
+// nil Config 會使用 DefaultConfig。
+func New(cfg *Config) (*Instance, error) {
+	if cfg == nil {
+		cfg = DefaultConfig()
 	} else {
-		levelEncoder = zapcore.CapitalLevelEncoder // without color
+		cfg = cfg.normalizedCopy()
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 
-	encoderConfig := zapcore.EncoderConfig{
+	level := zap.NewAtomicLevelAt(parseLevel(cfg.Level))
+	encoderConfig := buildEncoderConfig(cfg)
+	cores := make([]zapcore.Core, 0, len(cfg.Outputs))
+	closers := make([]io.Closer, 0, 1)
+
+	rollback := func(buildErr error) error {
+		return errors.Join(buildErr, closeOwnedResources(closers, "回收 logger 資源"))
+	}
+
+	for _, output := range cfg.Outputs {
+		switch output {
+		case "console":
+			cores = append(cores, newConsoleCore(cfg, encoderConfig, level))
+		case "file":
+			core, file, err := newFileCore(cfg, encoderConfig, level)
+			if err != nil {
+				return nil, rollback(err)
+			}
+			closers = append(closers, file)
+			cores = append(cores, core)
+		}
+	}
+
+	logger := zap.New(zapcore.NewTee(cores...))
+	options := make([]zap.Option, 0, 3)
+	if cfg.AddCaller {
+		options = append(options, zap.AddCaller(), zap.AddCallerSkip(1))
+	}
+	if cfg.AddStacktrace {
+		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel))
+	}
+	if cfg.Development {
+		options = append(options, zap.Development())
+	}
+	if len(options) > 0 {
+		logger = logger.WithOptions(options...)
+	}
+
+	instance := &Instance{
+		logger:  logger,
+		level:   level,
+		closers: closers,
+	}
+	instance.logger.Info("logger initialized",
+		zap.String("level", cfg.Level),
+		zap.String("format", cfg.Format),
+		zap.Strings("outputs", slices.Clone(cfg.Outputs)),
+		zap.String("path", cfg.LogPath),
+		zap.String("file", cfg.FileName),
+	)
+
+	return instance, nil
+}
+
+// Configure 建立並發布全域 logger，失敗時不修改既有全域狀態。
+func Configure(patch *ConfigPatch) (func() error, error) {
+	cfg, err := patch.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	return configureResolved(cfg)
+}
+
+// Init 保留既有初始化入口。
+//
+// Deprecated: 新程式應使用 Configure 取得可處理的錯誤與 cleanup。
+func Init(cfg *Config) {
+	merged := DefaultConfig().Merge(cfg).normalizedCopy()
+	_, err := configureResolved(merged)
+	if err == nil || errors.Is(err, ErrAlreadyConfigured) {
+		return
+	}
+	panic(err)
+}
+
+// initLogger 保留既有 package-private 測試入口。
+func initLogger(cfg *Config) {
+	Init(cfg)
+}
+
+func configureResolved(cfg *Config) (func() error, error) {
+	configureMu.Lock()
+	defer configureMu.Unlock()
+	if configured {
+		return nil, ErrAlreadyConfigured
+	}
+
+	instance, err := New(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	previousLogger := globalLogger
+	previousConfig := globalConfig
+	previousLevel := zapGlobalLevel
+	restoreZapGlobals := zap.ReplaceGlobals(instance.logger)
+
+	globalLogger = instance.logger
+	globalConfig = cfg.normalizedCopy()
+	zapGlobalLevel = instance.level
+	configured = true
+
+	var cleanupOnce sync.Once
+	var cleanupErr error
+	cleanup := func() error {
+		cleanupOnce.Do(func() {
+			configureMu.Lock()
+			globalLogger = previousLogger
+			globalConfig = previousConfig
+			zapGlobalLevel = previousLevel
+			restoreZapGlobals()
+			configureMu.Unlock()
+
+			cleanupErr = instance.Close()
+		})
+		return cleanupErr
+	}
+	globalCleanup = cleanup
+
+	return cleanup, nil
+}
+
+func buildEncoderConfig(cfg *Config) zapcore.EncoderConfig {
+	var levelEncoder zapcore.LevelEncoder
+	if cfg.ColorEnabled {
+		levelEncoder = zapcore.CapitalColorLevelEncoder
+	} else {
+		levelEncoder = zapcore.CapitalLevelEncoder
+	}
+
+	return zapcore.EncoderConfig{
 		TimeKey:          "ts",
 		LevelKey:         "level",
 		NameKey:          "logger",
@@ -99,139 +277,84 @@ func initLogger(cfg *Config) {
 		EncodeCaller:     zapcore.ShortCallerEncoder,
 		ConsoleSeparator: " ",
 	}
-
-	// Define log outputs
-	var outputs []zapcore.Core
-
-	// Process output targets
-	for _, output := range globalConfig.Outputs {
-		switch strings.ToLower(output) {
-		case "console":
-			core := buildConsoleCore(encoderConfig)
-			outputs = append(outputs, core)
-
-		case "file":
-			core := buildFileCore(encoderConfig)
-			if core != nil {
-				outputs = append(outputs, core)
-			}
-		}
-	}
-
-	// If no outputs specified, default to console output
-	if len(outputs) == 0 {
-		consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
-		consoleOutput := zapcore.Lock(os.Stdout)
-		outputs = append(outputs, zapcore.NewCore(consoleEncoder, consoleOutput, zapGlobalLevel))
-	}
-
-	// Create core logger
-	core := zapcore.NewTee(outputs...)
-
-	// Create logger instance
-	globalLogger = zap.New(core)
-
-	// Add hook for processing backslashes
-	globalLogger = globalLogger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
-		return nil
-	}))
-
-	var options []zap.Option
-
-	if globalConfig.AddCaller {
-		options = append(options, zap.AddCaller())
-		// Set caller skip to correctly display call location
-		options = append(options, zap.AddCallerSkip(1))
-	}
-
-	if globalConfig.AddStacktrace {
-		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel))
-	}
-
-	if globalConfig.Development {
-		options = append(options, zap.Development())
-	}
-
-	if len(options) > 0 {
-		globalLogger = globalLogger.WithOptions(options...)
-	}
-
-	// Replace global logger
-	zap.ReplaceGlobals(globalLogger)
-
-	// Log initialization info
-	globalLogger.Info("logger initialized",
-		zap.String("level", globalConfig.Level),
-		zap.String("format", globalConfig.Format),
-		zap.Strings("outputs", globalConfig.Outputs),
-		zap.String("path", globalConfig.LogPath),
-		zap.String("file", globalConfig.FileName),
-	)
 }
 
-// buildConsoleCore builds the console output core
-func buildConsoleCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
-	var encoder zapcore.Encoder
-	if strings.ToLower(globalConfig.Format) == "json" {
-		jsonEncoderConfig := encoderConfig
-		jsonEncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-			enc.AppendString(t.Format(time.RFC3339))
-		}
-		encoder = zapcore.NewJSONEncoder(jsonEncoderConfig)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
-	}
-	consoleOutput := zapcore.Lock(os.Stdout)
-	return zapcore.NewCore(encoder, consoleOutput, zapGlobalLevel)
+func newConsoleCore(cfg *Config, encoderConfig zapcore.EncoderConfig, level zap.AtomicLevel) zapcore.Core {
+	encoder := newEncoder(cfg.Format, encoderConfig)
+	return zapcore.NewCore(encoder, zapcore.Lock(os.Stdout), level)
 }
 
-// buildFileCore builds the file output core
-func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
-	var encoder zapcore.Encoder
-	if strings.ToLower(globalConfig.Format) == "json" {
-		jsonEncoderConfig := encoderConfig
-		jsonEncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-			enc.AppendString(t.Format(time.RFC3339))
-		}
-		encoder = zapcore.NewJSONEncoder(jsonEncoderConfig)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+func newFileCore(
+	cfg *Config,
+	encoderConfig zapcore.EncoderConfig,
+	level zap.AtomicLevel,
+) (zapcore.Core, *os.File, error) {
+	if err := os.MkdirAll(cfg.LogPath, 0o755); err != nil {
+		return nil, nil, fmt.Errorf("建立日誌目錄 %q: %w", cfg.LogPath, err)
 	}
 
-	// Ensure log directory exists
-	logDir := globalConfig.LogPath
-	if logDir == "" {
-		logDir = "./logs"
+	logFileName := cfg.FileName
+	if logFileName == "" {
+		logFileName = time.Now().Format("2006-01-02") + ".log"
 	}
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		panic("failed to create log directory: " + err.Error())
-	}
-
-	// Determine file name
-	var logFileName string
-	if globalConfig.FileName != "" {
-		logFileName = globalConfig.FileName
-	} else {
-		now := time.Now()
-		logFileName = now.Format("2006-01-02") + ".log"
-	}
-
-	// Open log file
-	logFilePath := filepath.Join(logDir, logFileName)
-	logFile, err := os.OpenFile(
-		logFilePath,
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
-		0644,
-	)
+	logFilePath := filepath.Join(cfg.LogPath, logFileName)
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
-		panic("failed to open log file: " + err.Error())
+		return nil, nil, fmt.Errorf("開啟日誌檔案 %q: %w", logFilePath, err)
 	}
 
-	fileOutput := zapcore.Lock(logFile)
-	return zapcore.NewCore(encoder, fileOutput, zapGlobalLevel)
+	encoder := newEncoder(cfg.Format, encoderConfig)
+	return zapcore.NewCore(encoder, zapcore.Lock(logFile), level), logFile, nil
 }
 
-// parseLevel parses the log level string
+func newEncoder(format string, encoderConfig zapcore.EncoderConfig) zapcore.Encoder {
+	if format == "json" {
+		jsonEncoderConfig := encoderConfig
+		jsonEncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.Format(time.RFC3339))
+		}
+		return zapcore.NewJSONEncoder(jsonEncoderConfig)
+	}
+	return zapcore.NewConsoleEncoder(encoderConfig)
+}
+
+func closeOwnedResources(closers []io.Closer, operation string) error {
+	closeErrs := make([]error, 0, len(closers))
+	for index := len(closers) - 1; index >= 0; index-- {
+		if err := closers[index].Close(); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("%s: %w", operation, err))
+		}
+	}
+	return errors.Join(closeErrs...)
+}
+
+// buildConsoleCore 保留既有 package-private 測試入口。
+func buildConsoleCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
+	cfg := globalConfig
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	return newConsoleCore(cfg, encoderConfig, zapGlobalLevel)
+}
+
+// buildFileCore 保留既有 package-private 測試入口。
+func buildFileCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
+	cfg := globalConfig
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	if cfg.LogPath == "" {
+		cfg = cfg.normalizedCopy()
+		cfg.LogPath = "./logs"
+	}
+	core, _, err := newFileCore(cfg, encoderConfig, zapGlobalLevel)
+	if err != nil {
+		panic(err)
+	}
+	return core
+}
+
+// parseLevel 解析既有 level 字串；未知值維持回退 info 的 legacy 行為。
 func parseLevel(level string) zapcore.Level {
 	switch strings.ToLower(level) {
 	case "debug":
@@ -249,53 +372,53 @@ func parseLevel(level string) zapcore.Level {
 	}
 }
 
-// Debug logs a debug message
+// Debug 記錄 debug 訊息。
 func Debug(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Debug(msg, fields...)
 	}
 }
 
-// Info logs an info message
+// Info 記錄 info 訊息。
 func Info(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Info(msg, fields...)
 	}
 }
 
-// Warn logs a warning message
+// Warn 記錄 warn 訊息。
 func Warn(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Warn(msg, fields...)
 	}
 }
 
-// Error logs an error message
+// Error 記錄 error 訊息。
 func Error(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Error(msg, fields...)
 	}
 }
 
-// Fatal logs a fatal error and exits the program
+// Fatal 記錄 fatal 訊息並由 zap 結束程序。
 func Fatal(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Fatal(msg, fields...)
 	}
 }
 
-// SetLevel dynamically sets the log level
+// SetLevel 動態調整全域 logger level。
 func SetLevel(level string) {
 	zapGlobalLevel.SetLevel(parseLevel(level))
 	Info("log level changed", String("level", level))
 }
 
-// GetLogger returns the raw zap logger
+// GetLogger 回傳目前全域 zap logger。
 func GetLogger() *zap.Logger {
 	return globalLogger
 }
 
-// Sync flushes the log buffer
+// Sync 將全域 logger 的緩衝資料同步至輸出。
 func Sync() error {
 	if globalLogger != nil {
 		return globalLogger.Sync()
@@ -303,7 +426,7 @@ func Sync() error {
 	return nil
 }
 
-// processSQLString processes escape characters in SQL strings
+// processSQLString 處理 SQL 字串中的跳脫字元。
 func processSQLString(sql string) string {
 	sql = strings.ReplaceAll(sql, "\\\\", "\\")
 	sql = strings.ReplaceAll(sql, "\\\"", "\"")
