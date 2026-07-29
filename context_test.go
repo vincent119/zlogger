@@ -181,7 +181,7 @@ func TestMergeContextFields_MergeFields(t *testing.T) {
 }
 
 func TestContextLogFunctions(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -217,8 +217,8 @@ func TestContextLogFunctions(t *testing.T) {
 	}
 }
 
-func TestContextLogFunctions_NilLogger(_ *testing.T) {
-	resetGlobalState()
+func TestContextLogFunctions_NilLogger(t *testing.T) {
+	resetGlobalState(t)
 
 	ctx := context.Background()
 
@@ -288,7 +288,7 @@ func TestWithComponent_EmptyString(t *testing.T) {
 }
 
 func TestContextLogFunctions_AllLevels(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{

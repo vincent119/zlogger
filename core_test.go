@@ -65,13 +65,17 @@ func TestProcessSQLString(t *testing.T) {
 	}
 }
 
-// resetGlobalState 隔離會修改全域 logger 的測試。
-func resetGlobalState() {
+// resetGlobalState 隔離會修改全域 logger 的測試，並回報資源清理錯誤。
+func resetGlobalState(t testing.TB) {
+	t.Helper()
+
 	configureMu.Lock()
 	cleanup := globalCleanup
 	configureMu.Unlock()
 	if cleanup != nil {
-		_ = cleanup()
+		if err := cleanup(); err != nil {
+			t.Errorf("清理全域 logger 失敗：%v", err)
+		}
 	}
 
 	configureMu.Lock()
@@ -84,8 +88,27 @@ func resetGlobalState() {
 	zap.ReplaceGlobals(zap.NewNop())
 }
 
+func registerGlobalCleanup(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		resetGlobalState(t)
+	})
+}
+
+func registerFileCleanup(t *testing.T, file *os.File) {
+	t.Helper()
+	if file == nil {
+		t.Fatal("測試日誌檔案不可為 nil")
+	}
+	t.Cleanup(func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("關閉測試日誌檔案失敗：%v", err)
+		}
+	})
+}
+
 func TestInit_WithNilConfig(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	// Use custom buffer to capture output
 	var buf bytes.Buffer
@@ -116,8 +139,8 @@ func TestInit_WithNilConfig(t *testing.T) {
 	}
 }
 
-func TestLogFunctions_NilLogger(_ *testing.T) {
-	resetGlobalState()
+func TestLogFunctions_NilLogger(t *testing.T) {
+	resetGlobalState(t)
 
 	// Should not panic when globalLogger is nil
 	Debug("debug message")
@@ -128,7 +151,7 @@ func TestLogFunctions_NilLogger(_ *testing.T) {
 }
 
 func TestSetLevel(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	// Set initial level
 	zapGlobalLevel.SetLevel(zap.InfoLevel)
@@ -147,7 +170,7 @@ func TestSetLevel(t *testing.T) {
 }
 
 func TestGetLogger_NilLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	logger := GetLogger()
 	if logger != nil {
@@ -156,7 +179,7 @@ func TestGetLogger_NilLogger(t *testing.T) {
 }
 
 func TestSync_NilLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	err := Sync()
 	if err != nil {
@@ -165,7 +188,7 @@ func TestSync_NilLogger(t *testing.T) {
 }
 
 func TestLogWithFields(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -292,7 +315,7 @@ func TestSqlProcessingCore_Write(t *testing.T) {
 }
 
 func TestSetLevel_WithLogger(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -323,7 +346,7 @@ func TestSetLevel_WithLogger(t *testing.T) {
 }
 
 func TestLogAllLevels(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	var buf bytes.Buffer
 	encoderConfig := zapcore.EncoderConfig{
@@ -364,7 +387,7 @@ func TestLogAllLevels(t *testing.T) {
 
 // Test Init and initLogger
 func TestInitLogger_WithConsoleOutput(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	cfg := &Config{
 		Level:        "debug",
@@ -385,7 +408,7 @@ func TestInitLogger_WithConsoleOutput(t *testing.T) {
 }
 
 func TestInitLogger_WithJSONFormat(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	cfg := &Config{
 		Level:        "info",
@@ -402,7 +425,7 @@ func TestInitLogger_WithJSONFormat(t *testing.T) {
 }
 
 func TestInitLogger_WithColorEnabled(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	cfg := &Config{
 		Level:        "info",
@@ -419,9 +442,10 @@ func TestInitLogger_WithColorEnabled(t *testing.T) {
 }
 
 func TestInitLogger_WithFileOutput(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	tmpDir := t.TempDir()
+	registerGlobalCleanup(t)
 
 	cfg := &Config{
 		Level:   "info",
@@ -447,9 +471,10 @@ func TestInitLogger_WithFileOutput(t *testing.T) {
 }
 
 func TestInitLogger_WithFileAndConsoleOutput(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	tmpDir := t.TempDir()
+	registerGlobalCleanup(t)
 
 	cfg := &Config{
 		Level:    "debug",
@@ -467,9 +492,10 @@ func TestInitLogger_WithFileAndConsoleOutput(t *testing.T) {
 }
 
 func TestInitLogger_WithAllOptions(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	tmpDir := t.TempDir()
+	registerGlobalCleanup(t)
 
 	cfg := &Config{
 		Level:         "debug",
@@ -491,7 +517,7 @@ func TestInitLogger_WithAllOptions(t *testing.T) {
 }
 
 func TestInitLogger_EmptyOutputs(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	cfg := &Config{
 		Level:   "info",
@@ -507,7 +533,7 @@ func TestInitLogger_EmptyOutputs(t *testing.T) {
 }
 
 func TestInitLogger_NilConfig(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	// Pass nil, should use default config
 	initLogger(nil)
@@ -518,7 +544,7 @@ func TestInitLogger_NilConfig(t *testing.T) {
 }
 
 func TestBuildConsoleCore_JSONFormat(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	globalConfig = &Config{
 		Format: "json",
@@ -539,7 +565,7 @@ func TestBuildConsoleCore_JSONFormat(t *testing.T) {
 }
 
 func TestBuildConsoleCore_ConsoleFormat(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	globalConfig = &Config{
 		Format: "console",
@@ -560,7 +586,7 @@ func TestBuildConsoleCore_ConsoleFormat(t *testing.T) {
 }
 
 func TestBuildFileCore_JSONFormat(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	tmpDir := t.TempDir()
 
@@ -577,14 +603,15 @@ func TestBuildFileCore_JSONFormat(t *testing.T) {
 		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
-	core := buildFileCore(encoderConfig)
+	core, file := buildFileCore(encoderConfig)
+	registerFileCleanup(t, file)
 	if core == nil {
 		t.Error("expected non-nil core")
 	}
 }
 
 func TestBuildFileCore_ConsoleFormat(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	tmpDir := t.TempDir()
 
@@ -601,14 +628,15 @@ func TestBuildFileCore_ConsoleFormat(t *testing.T) {
 		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
-	core := buildFileCore(encoderConfig)
+	core, file := buildFileCore(encoderConfig)
+	registerFileCleanup(t, file)
 	if core == nil {
 		t.Error("expected non-nil core")
 	}
 }
 
 func TestBuildFileCore_WithFileName(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	tmpDir := t.TempDir()
 
@@ -626,7 +654,8 @@ func TestBuildFileCore_WithFileName(t *testing.T) {
 		EncodeLevel: zapcore.CapitalLevelEncoder,
 	}
 
-	core := buildFileCore(encoderConfig)
+	core, file := buildFileCore(encoderConfig)
+	registerFileCleanup(t, file)
 	if core == nil {
 		t.Error("expected non-nil core")
 	}
@@ -646,7 +675,7 @@ func TestBuildFileCore_WithFileName(t *testing.T) {
 }
 
 func TestBuildFileCore_EmptyLogPath(t *testing.T) {
-	resetGlobalState()
+	resetGlobalState(t)
 
 	// Use temp directory since default would use ./logs
 	originalWd, _ := os.Getwd()
@@ -665,13 +694,11 @@ func TestBuildFileCore_EmptyLogPath(t *testing.T) {
 		MessageKey: "msg",
 	}
 
-	core := buildFileCore(encoderConfig)
+	core, file := buildFileCore(encoderConfig)
+	registerFileCleanup(t, file)
 	if core == nil {
 		t.Error("expected non-nil core with default log path")
 	}
-
-	// Cleanup
-	_ = os.RemoveAll("./logs")
 }
 
 func TestNewReturnsFileOpenError(t *testing.T) {
@@ -802,8 +829,8 @@ func TestNewCleanupIsConcurrentAndIdempotent(t *testing.T) {
 }
 
 func TestConfigureCanRetryAfterFailure(t *testing.T) {
-	resetGlobalState()
-	t.Cleanup(resetGlobalState)
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
 
 	tmpDir := t.TempDir()
 	notDirectory := filepath.Join(tmpDir, "not-directory")
@@ -837,8 +864,8 @@ func TestConfigureCanRetryAfterFailure(t *testing.T) {
 }
 
 func TestConfigureRejectsSecondSuccess(t *testing.T) {
-	resetGlobalState()
-	t.Cleanup(resetGlobalState)
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
 
 	cleanup, err := Configure(nil)
 	if err != nil {
@@ -862,8 +889,8 @@ func TestConfigureRejectsSecondSuccess(t *testing.T) {
 }
 
 func TestConfigureConcurrent(t *testing.T) {
-	resetGlobalState()
-	t.Cleanup(resetGlobalState)
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
 
 	const callers = 8
 	type result struct {
@@ -904,8 +931,8 @@ func TestConfigureConcurrent(t *testing.T) {
 }
 
 func TestLegacyInitCompatibility(t *testing.T) {
-	resetGlobalState()
-	t.Cleanup(resetGlobalState)
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
 
 	Init(nil)
 	if GetLogger() == nil {
