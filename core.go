@@ -83,42 +83,6 @@ func (i *Instance) Close() error {
 	return i.closeErr
 }
 
-// sqlProcessingCore 會處理 SQL 欄位中的跳脫字元。
-type sqlProcessingCore struct {
-	zapcore.Core
-}
-
-// With 實作 zapcore.Core。
-func (c *sqlProcessingCore) With(fields []zapcore.Field) zapcore.Core {
-	for i := range fields {
-		if fields[i].Key == "sql" && fields[i].Type == zapcore.StringType {
-			fields[i].String = processSQLString(fields[i].String)
-		}
-	}
-	return &sqlProcessingCore{Core: c.Core.With(fields)}
-}
-
-// Check 實作 zapcore.Core。
-func (c *sqlProcessingCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
-	if c.Enabled(ent.Level) {
-		return ce.AddCore(ent, c)
-	}
-	return ce
-}
-
-// Write 實作 zapcore.Core。
-func (c *sqlProcessingCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
-	ent.Message = strings.ReplaceAll(ent.Message, "\\", "")
-
-	for i := range fields {
-		if fields[i].Key == "sql" && fields[i].Type == zapcore.StringType {
-			fields[i].String = processSQLString(fields[i].String)
-		}
-	}
-
-	return c.Core.Write(ent, fields)
-}
-
 // New 建立不修改全域狀態的 logger Instance。
 // nil Config 會使用 DefaultConfig。
 func New(cfg *Config) (*Instance, error) {
@@ -429,12 +393,4 @@ func Sync() error {
 		return globalLogger.Sync()
 	}
 	return nil
-}
-
-// processSQLString 處理 SQL 字串中的跳脫字元。
-func processSQLString(sql string) string {
-	sql = strings.ReplaceAll(sql, "\\\\", "\\")
-	sql = strings.ReplaceAll(sql, "\\\"", "\"")
-	sql = strings.ReplaceAll(sql, "\\'", "'")
-	return sql
 }
