@@ -194,7 +194,7 @@ rg -n '^#|^##|^###|Boundary|Depends|Status|Implementation Notes' .specs/2026-07-
 ## 後續改善
 
 - [x] 基線合併後另立 os.Root 原子 containment TDD spec
-- [ ] 評估 govulncheck dependency 漏洞掃描與固定資料庫策略
-- [ ] 評估 Dependabot 的 Go modules 與 GitHub Actions 更新排程
+- [x] 評估 govulncheck dependency 漏洞掃描與固定資料庫策略
+- [x] 評估 Dependabot 的 Go modules 與 GitHub Actions 更新排程
 - [x] 完成 Context fields defensive copy
 - [x] 清理 encoder 假契約與 SQL dead code
