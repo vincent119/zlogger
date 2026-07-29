@@ -1,6 +1,6 @@
 # 設計文件：Go 1.25.12 安全修補
 
-Status: InProgress
+Status: Complete
 
 ## 決策
 
@@ -35,4 +35,4 @@ Status: InProgress
 
 - 官方漏洞資料庫會動態更新；驗證結果必須記錄日期、scanner 與工具鏈版本。
 - 本機 benchmark 受系統雜訊影響；僅將一致且超過 10% 的變化視為需調查訊號。
-- PR 合併前 main 仍使用 Go 1.25.11，依賴安全自動化工作維持 Blocked。
+- PR #18 已合併至 main；依賴安全自動化可改用 Go 1.25.12 恢復執行。

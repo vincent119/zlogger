@@ -1,6 +1,6 @@
 # 任務文件：Go 1.25.12 安全修補
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -37,13 +37,13 @@ Status: InProgress
   - Depends：T2、T3
   - Verify：`make verify`、YAML parse、diff check 與 Allowed Changes 通過
 
-- [ ] T5 遠端 CI 驗收
-  - Status: Planned
+- [x] T5 遠端 CI 驗收
+  - Status: Complete
   - Depends：T4
   - Verify：使用者授權 push 後，PR 的既有七項 CI 全數通過
 
-- [ ] T6 關閉規格並恢復自動化工作
-  - Status: Planned
+- [x] T6 關閉規格並恢復自動化工作
+  - Status: Complete
   - Depends：T5、合併至 main
   - Verify：本規格標記 Complete，依賴安全自動化規格改以 Go 1.25.12 繼續
 
@@ -70,9 +70,14 @@ Status: InProgress
   atomic coverage 92.5%，benchmark smoke test 通過；相容 cache 重跑 lint 無警告。
 - 2026-07-29：workflow YAML、`git diff --check`、Allowed Changes 與 go.mod／go.sum／
   `.go` 無差異檢查通過；遠端 CI 尚待使用者授權 commit／push。
+- 2026-07-29：PR #18 已以 merge commit `06d4524` 合併至 main；GitHub Actions run
+  `30441813010` 的七項 CI 全數成功，包含 Go 1.25.12／1.26.5 race、macOS／Windows
+  相容性、lint、coverage 與 benchmark。
+- 2026-07-29：main 已 fast-forward 至 `06d4524`，本規格關閉；
+  `chore/dependency-security-automation` 同步至最新 main，改用 Go 1.25.12 恢復工作。
 
 ## 驗證結果摘要
 
 - 實作：本機範圍完成
 - 本機驗證：通過；已記錄 Go 1.25.12 單欄位 context 建構的限定效能差異
-- 遠端驗收：尚未授權
+- 遠端驗收：PR #18 與七項 CI 全數通過

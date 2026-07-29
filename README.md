@@ -763,15 +763,31 @@ make verify
 ```bash
 make test-race       # race detector 測試
 make lint            # golangci-lint v2.12.2
+make vuln            # govulncheck v1.6.0 可達漏洞掃描
 make coverage-check  # 總覆蓋率不得低於 90%
 make bench           # logger 關鍵路徑 benchmark
 make fmt-check       # 驗證格式但不修改檔案
 ```
 
+漏洞掃描使用固定版本 scanner 與 Go 官方即時資料庫：
+
+```bash
+go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+make vuln
+```
+
+`make vuln` 會先驗證 scanner 版本，再查詢 `https://vuln.go.dev`。發現可達漏洞、
+版本不符、網路或資料庫錯誤都會回傳失敗；由於依賴外部服務，此 target 不包含在
+`make verify`。CI 會以 Go 1.25.12 與 Go 1.26.5 分別執行掃描。
+
 CI 在 Linux 使用 Go 1.25.12 與 Go 1.26.5 執行 race 測試，並使用 Go 1.26.5
 執行 macOS 15、Windows 2025 相容性測試。GitHub Actions 均釘選完整 commit
 SHA，workflow token 僅具 `contents: read` 權限。coverage job 通過 90% 門檻後，
 會將 `coverage.out` 上傳至 Codecov，供 README badge 與歷史趨勢使用。
+
+Dependabot 於每週一 Asia/Taipei 09:00 檢查 Go modules，09:30 檢查 GitHub
+Actions。每個 ecosystem 同時最多提出 2 個 version update PR；minor／patch 會分組，
+major 與 security update 維持獨立人工審查，不會自動合併。
 
 ## License
 
