@@ -1,0 +1,10 @@
+.gocache/
+.gomodcache/
+
+.DS_Store
+
+*/temp/
+.cache
+
+
+_workspace/
