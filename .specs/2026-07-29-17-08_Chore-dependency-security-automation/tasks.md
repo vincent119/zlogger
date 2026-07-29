@@ -1,6 +1,6 @@
 # 任務文件：依賴安全自動化
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -54,8 +54,8 @@ Status: InProgress
 | T4 新增 Dependabot weekly 設定 | T0 | Complete | gomod／github-actions 分開 |
 | T5 更新 README 與 DESIGN | T2 至 T4 | Complete | scanner／DB／更新政策一致 |
 | T6 本機完整驗證 | T1 至 T5 | Complete | 兩版 scan／race、verify、YAML 與邊界通過 |
-| T7 遠端九項 CI 驗收 | T6 | Planned | push 後驗證 vulnerability matrix |
-| T8 回填完成狀態與歷史待辦 | T7 | Planned | 只更新明列 checkbox |
+| T7 遠端九項 CI 驗收 | T6 | Complete | run 30442557137 九項全數成功 |
+| T8 回填完成狀態與歷史待辦 | T7 | Complete | 只更新明列 checkbox |
 
 ## 實作任務
 
@@ -147,8 +147,8 @@ Status: InProgress
     - `git diff -- go.mod go.sum '*.go'` 無差異
     - `git status --short` 無 scanner／vulnerability／coverage 產物
 
-- [ ] T7 遠端九項 CI 驗收
-  - Status: Planned
+- [x] T7 遠端九項 CI 驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：為通過 CI 降級 fail-closed、移除版本、加 bypass／permission／secret
@@ -156,8 +156,8 @@ Status: InProgress
   - Context：經使用者另行授權 commit／push 後確認既有七項與兩版 vulnerability job 全部通過；job log 必須顯示 v1.6.0、對應 Go 版本及無可達漏洞。Dependabot 只有進入 default branch 後開始運作，不要求 PR 階段產生更新。
   - Verify：`gh pr checks`／`gh run view` 顯示九項 jobs pass，兩個 vulnerability logs 契約正確
 
-- [ ] T8 回填完成狀態與歷史待辦
-  - Status: Planned
+- [x] T8 回填完成狀態與歷史待辦
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 requirements／tasks；Execution Context 明列的兩個歷史 checkbox
     - Forbidden：其他 spec、產品碼或文件內容重寫
@@ -167,25 +167,25 @@ Status: InProgress
 
 ## 驗證任務
 
-- [ ] V1 govulncheck tool 與退出契約
+- [x] V1 govulncheck tool 與退出契約
   - v1.6.0 固定於 Makefile 與 workflow
   - 缺工具、錯版本、漏洞／DB error 均非零
   - 正確工具與無漏洞時兩版成功
   - 不使用永遠成功的結構化格式作 gate
 
-- [ ] V2 CI 供應鏈與最小權限
+- [x] V2 CI 供應鏈與最小權限
   - 新增兩版 matrix，總 job 數九項
   - 外部 Action 維持完整 SHA
   - permissions 只有 contents read
   - 無新 secret、pull_request_target、continue-on-error、movable ref 或 bypass
 
-- [ ] V3 Dependabot 更新契約
+- [x] V3 Dependabot 更新契約
   - gomod／github-actions 分開 weekly 與錯峰
   - 每 ecosystem version PR limit 2
   - minor／patch grouped，major 與 security update 獨立
   - 無 auto-merge、private registry 或外部身份假設
 
-- [ ] V4 回歸、文件與邊界
+- [x] V4 回歸、文件與邊界
   - 兩版 race、make verify、YAML parse、diff check 通過
   - go.mod／go.sum、產品碼與既有七項 CI 行為不變
   - README／DESIGN 不宣稱 DB pinned、離線、auto-fix 或 auto-merge
@@ -237,13 +237,23 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' .specs/2026-
 - 2026-07-29：兩份 YAML parse、預期九項 checks、14 個 Action refs 全為 40 字元 SHA、
   禁止字串、`git diff --check` 與 Allowed Changes 均通過；go.mod、go.sum、產品與測試
   `.go` 無差異，coverage 產物已清理。
+- 2026-07-29：PR #19 已以 head `b37dfa7`、merge commit `99d5668` 合併至 main；
+  GitHub Actions run `30442557137` 的九項 checks 全數成功。
+- 2026-07-29：vulnerability job `90545057899` 顯示 Go 1.25.12、govulncheck v1.6.0、
+  DB `https://vuln.go.dev` 與 `No vulnerabilities found.`；job `90545057970` 對
+  Go 1.26.5 顯示相同 scanner、DB 與無漏洞結果。
+- 2026-07-29：`.github/dependabot.yml` 已隨 merge commit 進入 default branch；GitHub
+  沒有在本次驗收提供可證明首次排程已執行的同步狀態，且規格不要求立即產生更新 PR，
+  因此只記錄設定已生效的前置條件，不捏造排程或更新 PR 結果。
+- 2026-07-29：T7、T8、V1 至 V4 與本 spec 狀態關閉；CI 基線 spec 只勾選
+  govulncheck 與 Dependabot 兩個明列後續項目。
 
 ## 驗證結果摘要
 
-- 新行為驗證：本機通過；缺工具、錯版本、兩版正確掃描、YAML 與安全 contract 均通過
-- 回歸驗證：兩版 race 與 `make verify` 通過，coverage 92.5%、lint 0 issues
+- 新行為驗證：本機與遠端通過；兩版 vulnerability job 使用正確工具鏈、scanner 與 DB
+- 回歸驗證：遠端九項 checks 全數成功；本機 coverage 92.5%、lint 0 issues
 - 文件一致性：README、DESIGN、Makefile、workflow、Dependabot 與 SDD 契約一致
-- 剩餘風險：官方 DB 可用性與即時資料漂移；依 fail-closed 與人工 rerun 政策處理
+- 剩餘風險：官方 DB 可用性與即時資料漂移；Dependabot 首次排程尚待 GitHub 後續執行
 
 ## 後續改善
 

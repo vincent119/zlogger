@@ -5,11 +5,11 @@
 - Draft: 無
 - Type: Chore
 - Owner: vincent119
-- Status: InProgress
+- Status: Complete
 
 ## 文件定位
 
-本 spec 接續 `.specs/2026-07-29-11-48_Chore-go-toolchain-ci-baseline/tasks.md` 尚未完成的 `govulncheck` 與 Dependabot 評估。它只新增 Go 漏洞掃描與依賴更新排程，不重寫既有 race、跨平台、lint、coverage、Codecov、benchmark、Action SHA 或產品功能。
+本 spec 接續 `.specs/2026-07-29-11-48_Chore-go-toolchain-ci-baseline/tasks.md` 原先尚未完成的 `govulncheck` 與 Dependabot 評估。它只新增 Go 漏洞掃描與依賴更新排程，不重寫既有 race、跨平台、lint、coverage、Codecov、benchmark、Action SHA 或產品功能。
 
 參考來源：
 
@@ -180,4 +180,5 @@ CI 無法自動阻擋目前工具鏈或可達依賴漏洞，也沒有機制定�
 - 關鍵決策：固定 govulncheck v1.6.0、使用官方即時 DB、兩版 fail-closed；Dependabot weekly 且分 ecosystem
 - 待確認項目：無
 - 風險：外部 DB 可用性與 default branch 後才生效，以 rerun、靜態 contract 與合併後觀察處理
-- 下一步：Go 1.25.12 安全先決修補已合併，依 tasks 從 Makefile `vuln` target 繼續實作
+- 完成狀態：PR #19 已合併，九項 CI 與兩版 vulnerability log 均通過；Dependabot
+  設定已進入 default branch，實際排程與更新 PR 依 GitHub 後續執行狀態觀察
