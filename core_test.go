@@ -44,27 +44,6 @@ func TestParseLevel(t *testing.T) {
 	}
 }
 
-func TestProcessSQLString(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{`SELECT * FROM users`, `SELECT * FROM users`},
-		{`SELECT * FROM users WHERE name = \"John\"`, `SELECT * FROM users WHERE name = "John"`},
-		{`SELECT * FROM users WHERE name = \'John\'`, `SELECT * FROM users WHERE name = 'John'`},
-		{`path\\to\\file`, `path\to\file`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := processSQLString(tt.input)
-			if result != tt.expected {
-				t.Errorf("processSQLString(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
 // resetGlobalState 隔離會修改全域 logger 的測試，並回報資源清理錯誤。
 func resetGlobalState(t testing.TB) {
 	t.Helper()
@@ -222,95 +201,6 @@ func TestLogWithFields(t *testing.T) {
 	}
 	if !strings.Contains(output, `"bool":true`) {
 		t.Errorf("expected bool field, got: %s", output)
-	}
-}
-
-// Test sqlProcessingCore
-func TestSqlProcessingCore_With(t *testing.T) {
-	var buf bytes.Buffer
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:     "ts",
-		LevelKey:    "level",
-		MessageKey:  "msg",
-		EncodeTime:  zapcore.ISO8601TimeEncoder,
-		EncodeLevel: zapcore.CapitalLevelEncoder,
-	}
-	baseCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		zapcore.AddSync(&buf),
-		zap.DebugLevel,
-	)
-
-	sqlCore := &sqlProcessingCore{Core: baseCore}
-
-	// Test With method
-	fields := []zapcore.Field{
-		zap.String("sql", `SELECT * FROM users WHERE name = \"John\"`),
-	}
-	newCore := sqlCore.With(fields)
-	if newCore == nil {
-		t.Error("expected non-nil core from With")
-	}
-}
-
-func TestSqlProcessingCore_Check(t *testing.T) {
-	var buf bytes.Buffer
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:     "ts",
-		LevelKey:    "level",
-		MessageKey:  "msg",
-		EncodeTime:  zapcore.ISO8601TimeEncoder,
-		EncodeLevel: zapcore.CapitalLevelEncoder,
-	}
-	baseCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		zapcore.AddSync(&buf),
-		zap.DebugLevel,
-	)
-
-	sqlCore := &sqlProcessingCore{Core: baseCore}
-
-	// Test Check method
-	entry := zapcore.Entry{
-		Level:   zap.InfoLevel,
-		Message: "test",
-	}
-	ce := &zapcore.CheckedEntry{}
-	result := sqlCore.Check(entry, ce)
-	if result == nil {
-		t.Error("expected non-nil CheckedEntry")
-	}
-}
-
-func TestSqlProcessingCore_Write(t *testing.T) {
-	var buf bytes.Buffer
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:     "ts",
-		LevelKey:    "level",
-		MessageKey:  "msg",
-		EncodeTime:  zapcore.ISO8601TimeEncoder,
-		EncodeLevel: zapcore.CapitalLevelEncoder,
-	}
-	baseCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		zapcore.AddSync(&buf),
-		zap.DebugLevel,
-	)
-
-	sqlCore := &sqlProcessingCore{Core: baseCore}
-
-	// Test Write method
-	entry := zapcore.Entry{
-		Level:   zap.InfoLevel,
-		Message: "test with \\backslash",
-	}
-	fields := []zapcore.Field{
-		zap.String("sql", `SELECT * FROM users WHERE name = \"John\"`),
-	}
-
-	err := sqlCore.Write(entry, fields)
-	if err != nil {
-		t.Errorf("Write failed: %v", err)
 	}
 }
 

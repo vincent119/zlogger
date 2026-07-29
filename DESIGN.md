@@ -227,39 +227,21 @@ type Field = zap.Field
 
 ---
 
-## 6. SQL 處理設計
+## 6. Encoder 相容性與字串資料保真
 
-### 6.1 sqlProcessingCore 包裝器
+### 6.1 JSON escaping ownership
 
-```go
-type sqlProcessingCore struct {
-    zapcore.Core
-}
-```
+- JSON escaping 由建立 core 時選擇的 encoder 負責，zlogger 不在 logger 建立後更換 encoder。
+- zap v1.27.0 的 JSON encoder 會處理 quote、backslash、控制字元與無效 UTF-8，但不進行 HTML browser／JSONP protection escaping。
+- `NewNoEscapeJSONEncoder` 與 `DisableHTMLEscaping` 僅為 v1 source compatibility 保留，均已標記 `Deprecated:`。
+- 新程式應直接使用 `zapcore.NewJSONEncoder`，或在建立 core 時選擇符合需求的 encoder。
 
-**設計目的：**
+### 6.2 Message 與 field 資料保真
 
-- 自動處理 SQL 字串中的轉義字符
-- 清理多餘的反斜線
-- 改善日誌可讀性
-
-**處理流程：**
-
-```bash
-Write() 被調用
-  └─> 檢查 field.Key == "sql"
-      └─> processSQLString() 處理轉義字符
-          ├─> 移除 "\\\\" → "\"
-          ├─> 移除 "\\\"" → "\""
-          └─> 移除 "\\'" → "'"
-```
-
-**使用範例：**
-
-```go
-zlogger.Info("執行 SQL", zlogger.String("sql", "SELECT * FROM users"))
-// 自動清理 SQL 中的轉義字符
-```
+- zlogger 不根據 field key 或 message 內容執行隱含字串改寫。
+- 名為 `sql` 的 field 與一般 string field 套用相同規則，不會自動移除反斜線或引號。
+- SQL formatting、redaction 與參數化查詢屬呼叫端或資料庫層責任，不是 logger 的隱含行為。
+- `DisableHTMLEscaping` 無法修改既有 logger 的 encoder；compatibility 實作只原樣回傳輸入 logger。
 
 ---
 
@@ -490,7 +472,6 @@ func WithOptions(opts ...zap.Option) *Logger
 | 配置     | 程式碼配置   | 支援設定檔綁定              |
 | Context  | 需手動處理   | 自動合併 context 字段       |
 | 全局函數 | 無           | 提供 `Info()`, `Error()` 等 |
-| SQL 處理 | 無           | 自動清理 SQL 轉義字符       |
 | 分離輸出 | 需自行實現   | 提供 `GetSplitCore()`       |
 
 **設計目標：** 在保持 zap 性能的同時，提供更簡潔的 API 和更豐富的功能。
