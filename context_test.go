@@ -217,7 +217,7 @@ func TestContextLogFunctions(t *testing.T) {
 	}
 }
 
-func TestContextLogFunctions_NilLogger(t *testing.T) {
+func TestContextLogFunctions_NilLogger(_ *testing.T) {
 	resetGlobalState()
 
 	ctx := context.Background()

@@ -235,9 +235,11 @@ func TestFileOutputPreservesExistingPermissions(t *testing.T) {
 
 	base := t.TempDir()
 	path := filepath.Join(base, "app.log")
+	//nolint:gosec // 測試刻意建立 0640 檔案，驗證 logger 不會改寫既有權限。
 	if err := os.WriteFile(path, []byte("既有內容\n"), 0o640); err != nil {
 		t.Fatalf("建立既有檔案失敗：%v", err)
 	}
+	//nolint:gosec // 測試刻意設定 0640，驗證既有 group-read 權限保持不變。
 	if err := os.Chmod(path, 0o640); err != nil {
 		t.Fatalf("設定既有 mode 失敗：%v", err)
 	}
@@ -265,6 +267,7 @@ func TestFileOutputPreservesExistingPermissions(t *testing.T) {
 	if info.Mode().Perm() != 0o640 {
 		t.Fatalf("既有 mode = %04o，預期 0640", info.Mode().Perm())
 	}
+	//nolint:gosec // path 由 t.TempDir 與固定安全 leaf 組成。
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("讀取既有檔案失敗：%v", err)
@@ -276,6 +279,7 @@ func TestFileOutputPreservesExistingPermissions(t *testing.T) {
 
 func assertFileContent(t *testing.T, path, want string) {
 	t.Helper()
+	//nolint:gosec // helper 只接收測試建立於 t.TempDir 的預期路徑。
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("讀取檔案 %q 失敗：%v", path, err)

@@ -116,7 +116,7 @@ func TestInit_WithNilConfig(t *testing.T) {
 	}
 }
 
-func TestLogFunctions_NilLogger(t *testing.T) {
+func TestLogFunctions_NilLogger(_ *testing.T) {
 	resetGlobalState()
 
 	// Should not panic when globalLogger is nil

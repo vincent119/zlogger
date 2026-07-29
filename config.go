@@ -185,13 +185,13 @@ func (c *Config) normalizedCopy() *Config {
 		return nil
 	}
 
-	copy := *c
-	copy.Level = strings.ToLower(c.Level)
-	copy.Format = strings.ToLower(c.Format)
-	copy.Outputs = slices.Clone(c.Outputs)
-	for i := range copy.Outputs {
-		copy.Outputs[i] = strings.ToLower(copy.Outputs[i])
+	cloned := *c
+	cloned.Level = strings.ToLower(c.Level)
+	cloned.Format = strings.ToLower(c.Format)
+	cloned.Outputs = slices.Clone(c.Outputs)
+	for i := range cloned.Outputs {
+		cloned.Outputs[i] = strings.ToLower(cloned.Outputs[i])
 	}
 
-	return &copy
+	return &cloned
 }
