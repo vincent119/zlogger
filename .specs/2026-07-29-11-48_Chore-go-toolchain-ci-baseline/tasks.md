@@ -189,11 +189,12 @@ rg -n '^#|^##|^###|Boundary|Depends|Status|Implementation Notes' .specs/2026-07-
 - 2026-07-29：固定 benchstat 以每組 10 次樣本比較：disabled 路徑無顯著差異；fields 路徑 Go 1.26.5 為 -29.26% sec/op；B/op 與 allocs/op 均不變。樣本執行時間變異偏高，但沒有超過 10% 的退化證據。
 - 2026-07-29：T8 的 Go 1.25.11／1.26.5 race 與 T11 的安全、依賴、diff、產物及變更邊界檢查均完成；T9 保留等待 push 後的 GitHub-hosted macOS 15／Windows 2025 實際執行。
 - 2026-07-29：PR #5 的 GitHub Actions run 30425988956 七項檢查全部通過；Windows 2025 job 90492470365、macOS 15、Go 1.25.11／1.26.5 race、lint、coverage 與 benchmark 均完成。T9 與本 tasks 狀態更新為 Complete。
+- 2026-07-29：後續 os.Root 原子 containment 已由 PR #8／run `30427993668` 完成；Context fields defensive copy 已由 PR #10／run `30430536442` 完成；encoder 契約與 SQL dead code 清理已由 PR #12／run `30432312003` 完成。
 
 ## 後續改善
 
-- [ ] 基線合併後另立 os.Root 原子 containment TDD spec
+- [x] 基線合併後另立 os.Root 原子 containment TDD spec
 - [ ] 評估 govulncheck dependency 漏洞掃描與固定資料庫策略
 - [ ] 評估 Dependabot 的 Go modules 與 GitHub Actions 更新排程
-- [ ] 完成 Context fields defensive copy
-- [ ] 清理 encoder 假契約與 SQL dead code
+- [x] 完成 Context fields defensive copy
+- [x] 清理 encoder 假契約與 SQL dead code

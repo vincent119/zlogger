@@ -194,6 +194,7 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' .specs/2026-
 - 2026-07-29：後續 `os.Root` containment 已由 PR #8 完成並合併為 `4d05e06`；GitHub Actions run `30427993668` 七項檢查全部通過。
 - 2026-07-29：Context fields defensive copy 已由 PR #10 完成並合併為 `e1306af`；GitHub Actions run `30430536442` 七項檢查全部通過。
 - 2026-07-29：encoder 契約與 SQL dead code 清理已由 PR #12 完成並合併為 `f7ae8f6`；GitHub Actions run `30432312003` 七項檢查全部通過。
+- 2026-07-29：GitHub Actions 與 golangci-lint 釘選及最小 permissions 已由 CI 基線完成；可配置 DirPerm／FilePerm options 已由 PR #14 完成並合併為 `d1a5618`，GitHub Actions run `30434997130` 七項檢查全部通過。
 
 ## 驗證結果摘要
 
@@ -208,7 +209,7 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' .specs/2026-
 ## 後續改善
 
 - [x] 升級 go.mod／CI 至 Go 1.25+，改用 os.Root 提供原子 containment
-- [ ] 釘選 GitHub Actions 與 golangci-lint 版本，加入最小 permissions
-- [ ] 評估可配置 DirPerm／FilePerm functional options
+- [x] 釘選 GitHub Actions 與 golangci-lint 版本，加入最小 permissions
+- [x] 評估可配置 DirPerm／FilePerm functional options
 - [x] 修正 Context fields defensive copy
 - [x] 清理 encoder 假契約與 SQL dead code

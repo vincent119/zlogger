@@ -1,6 +1,6 @@
 # 任務文件：可配置檔案輸出權限
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
@@ -59,8 +59,8 @@ Status: InProgress
 | T4 整合 SplitOutput 與 rotation | T2 | Complete | 初始與 rotation 共用 settings |
 | T5 更新公開文件 | T3、T4 | Complete | umask、安全責任與 Windows 限制已記錄 |
 | T6 本機完整驗證 | T1 至 T5 | Complete | 兩版 race、20 次與 verify 通過 |
-| T7 遠端跨平台驗收 | T6 | Planned | push 後七項 CI |
-| T8 回填 spec 與歷史待辦 | T7 | Planned | 只更新明列 checkbox |
+| T7 遠端跨平台驗收 | T6 | Complete | PR #14 的七項 CI 全部通過 |
+| T8 回填 spec 與歷史待辦 | T7 | Complete | 只更新明列 checkbox，並附合併證據 |
 
 ## 實作任務
 
@@ -133,8 +133,8 @@ Status: InProgress
     - `make verify`
     - `git diff --check`
 
-- [ ] T7 遠端 macOS／Windows 驗收
-  - Status: Planned
+- [x] T7 遠端 macOS／Windows 驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：為通過 CI 修改 workflow、skip、mode 契約或 sleep
@@ -142,8 +142,8 @@ Status: InProgress
   - Context：經使用者授權 commit／push 後確認七項 CI 全部通過；Windows 必須通過 option validation、建立、rotation 與 cleanup，只允許 POSIX mode assertion skip。
   - Verify：`gh pr checks` 或 `gh run view` 顯示七個 jobs pass
 
-- [ ] T8 回填完成狀態與歷史待辦
-  - Status: Planned
+- [x] T8 回填完成狀態與歷史待辦
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 spec；Execution Context 明列的兩份歷史 tasks checkbox
     - Forbidden：其他 spec、產品碼、測試或文件內容重寫
@@ -164,7 +164,7 @@ Status: InProgress
   - umask 只會限縮 mode
   - 既有物件 mode 不變且 append 保留
 
-- [ ] V3 SplitOutput lifecycle
+- [x] V3 SplitOutput lifecycle
   - 初始三檔與 rotation 沿用相同 settings
   - 路由、transaction、Close、Sync 與 os.ErrClosed 不變
   - Windows cleanup 無 handle regression
@@ -174,7 +174,7 @@ Status: InProgress
   - 無 Chmod、Chown、ACL、Config schema、新 dependency 或 CI 變更
   - README／DESIGN 不過度承諾
 
-- [ ] V5 品質與跨平台
+- [x] V5 品質與跨平台
   - Go 1.25.11／1.26.5 race
   - targeted tests 連續 20 次
   - fmt、vet、lint、coverage、benchmark
@@ -214,13 +214,15 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' .specs/2026-
 - 2026-07-29：第一次 `make verify` 在 lint 階段揭露五個刻意建立 `0640` 參考檔的 G306 finding，以及一個已無 caller 的 private default opener；逐處加入受控測試理由並移除 unused wrapper，未降低 lint 規則。
 - 2026-07-29：最終 `make verify GOLANGCI_LINT=/private/tmp/zlogger-tools/golangci-lint` 通過 fmt-check、vet、golangci-lint v2.12.2、race、92.5% coverage gate 與 benchmark smoke；`make clean` 已移除 coverage 產物。
 - 2026-07-29：`go doc` 確認七個新增 exported identifiers 的 godoc 可見；`git diff --check` 通過，差異只含 Allowed Changes，未修改 Config schema、dependency、CI、Makefile、lint、Codecov 或無關產品檔，產品碼無 Chmod／Chown／umask 操作。
+- 2026-07-29：PR #14 已合併為 `d1a5618`；GitHub Actions run `30434997130` 的 macOS 15、Windows 2025、Go 1.25.11／1.26.5 race、靜態與格式、coverage／Codecov、benchmark 共七項工作全部通過，完成 T7、V3 與 V5。
+- 2026-07-29：完成 T8；本 spec 狀態已回填為 Complete，並依明列邊界更新檔案輸出安全規格的 CI 釘選與 permission options，以及 CI 基線規格中已有合併證據的 os.Root、Context、encoder／SQL 後續項目。
 
 ## 驗證結果摘要
 
 - 新行為驗證：通過；目標 race 與相同 selectors 連續 20 次通過
 - 回歸驗證：通過；Go 1.25.11／1.26.5 完整 race 與 `make verify` 通過
 - 文件一致性：已確認 README、DESIGN、godoc、requirements、design 與 tasks
-- 剩餘風險：尚待 push 後的 macOS 15／Windows 2025 遠端 CI 與 merge 證據
+- 剩餘風險：無阻擋風險；僅保留下列不屬於本 spec 的後續改善
 
 ## 後續改善
 
