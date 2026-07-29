@@ -279,3 +279,47 @@ func TestConfigPatchResolveRejectsExplicitEmptyLogPath(t *testing.T) {
 		t.Fatalf("錯誤 = %v，預期可由 errors.Is 判斷為 ErrInvalidConfig", err)
 	}
 }
+
+func TestConfigValidateRejectsUnsafeFileName(t *testing.T) {
+	unsafeNames := []string{
+		"../outside.log",
+		"/tmp/outside.log",
+		"sub/app.log",
+		`sub\app.log`,
+		".",
+		"..",
+		"app\x00.log",
+		`C:app.log`,
+		`C:\logs\app.log`,
+	}
+
+	for _, name := range unsafeNames {
+		t.Run(name, func(t *testing.T) {
+			cfg := &Config{
+				Level:    "info",
+				Format:   "json",
+				Outputs:  []string{"file"},
+				LogPath:  t.TempDir(),
+				FileName: name,
+			}
+			err := cfg.Validate()
+			if !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("錯誤 = %v，預期 ErrInvalidConfig", err)
+			}
+			if !errors.Is(err, ErrUnsafeLogPath) {
+				t.Fatalf("錯誤 = %v，預期 ErrUnsafeLogPath", err)
+			}
+		})
+	}
+
+	consoleOnly := &Config{
+		Level:    "info",
+		Format:   "json",
+		Outputs:  []string{"console"},
+		LogPath:  "./logs",
+		FileName: "../unused.log",
+	}
+	if err := consoleOnly.Validate(); err != nil {
+		t.Fatalf("console-only Config 不應驗證未使用的 FileName：%v", err)
+	}
+}

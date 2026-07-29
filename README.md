@@ -142,6 +142,47 @@ Output、重複 Output，以及 file output 明確使用空白 LogPath 都會回
 既有 `Init(*Config)` 保留來源碼相容，但無法回傳設定或 I/O 錯誤，且
 `Config` 的 bool 無法區分未提供與 `false`。新程式應使用 `Configure`。
 
+## 檔案輸出安全
+
+`LogPath` 與 SplitOutput 的 `directory` 是呼叫端信任並選定的基準目錄；
+`FileName` 與 `filePrefix` 只允許單一 leaf name，不得包含以下內容：
+
+- `.`、`..`
+- `/` 或 `\` 路徑分隔符
+- 絕對路徑或 Windows drive prefix
+- NUL
+
+不安全名稱會回傳可由 `errors.Is(err, zlogger.ErrUnsafeLogPath)` 判斷的錯誤。
+Config 驗證錯誤同時保留 `ErrInvalidConfig` 分類。
+
+新建立的日誌目錄使用 `0700`，新建立的日誌檔使用 `0600`。實際權限可能
+被 umask 進一步收緊；已存在的目錄或檔案不會被主動 chmod。
+
+若最終目標已是 symlink，logger 會拒絕開啟且不修改其指向內容。專案目前
+維持 Go 1.21 最低版本，因此檢查採 `Lstat` 後再開檔，仍存在並行置換造成的
+TOCTOU 剩餘風險。需要對抗本機惡意程序時，應另外限制設定來源與檔案系統
+權限，並在工具鏈升版後採用 `os.Root` 類型的 containment。
+
+### 敏感資訊
+
+日誌欄位應採白名單，只記錄診斷所需的最小資料。禁止直接記錄：
+
+- token、API key、密碼與私鑰
+- `Authorization`、cookie 與 session identifier
+- 身分證號、金融資料、完整地址及其他完整個資
+- 含秘密欄位的完整 request、response、Config 或任意 struct
+
+需保留欄位存在性時，使用不接收原始秘密值的 `Redacted`：
+
+```go
+zlogger.Info("驗證請求",
+	zlogger.Redacted("authorization"),
+	zlogger.String("request_id", requestID),
+)
+```
+
+`Redacted` 只輸出固定 `[REDACTED]`，不會自動掃描或遮罩其他欄位。
+
 ### JSON 範例
 
 ```json

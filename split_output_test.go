@@ -137,6 +137,44 @@ func TestNewSplitOutput(t *testing.T) {
 	}
 }
 
+func TestNewSplitOutputRejectsUnsafePrefix(t *testing.T) {
+	unsafePrefixes := []string{
+		"../outside",
+		"/tmp/outside",
+		"sub/app",
+		`sub\app`,
+		".",
+		"..",
+		"app\x00name",
+		`C:app`,
+		`C:\logs\app`,
+	}
+
+	for _, prefix := range unsafePrefixes {
+		t.Run(prefix, func(t *testing.T) {
+			base := filepath.Join(t.TempDir(), "不應建立")
+			output, err := NewSplitOutput(base, prefix)
+			if output != nil {
+				_ = output.Close()
+			}
+			if !errors.Is(err, ErrUnsafeLogPath) {
+				t.Fatalf("錯誤 = %v，預期 ErrUnsafeLogPath", err)
+			}
+			if _, statErr := os.Stat(base); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("不安全 prefix 不應建立 directory，Stat 錯誤 = %v", statErr)
+			}
+		})
+	}
+
+	output, err := NewSplitOutput(t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("空 prefix 應保持既有可用行為：%v", err)
+	}
+	if err := output.Close(); err != nil {
+		t.Fatalf("關閉空 prefix SplitOutput 失敗：%v", err)
+	}
+}
+
 func TestSplitOutput_Write_InfoLevel(t *testing.T) {
 	tmpDir := t.TempDir()
 

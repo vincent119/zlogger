@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -289,7 +288,7 @@ func newFileCore(
 	encoderConfig zapcore.EncoderConfig,
 	level zap.AtomicLevel,
 ) (zapcore.Core, *os.File, error) {
-	if err := os.MkdirAll(cfg.LogPath, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.LogPath, defaultLogDirMode); err != nil {
 		return nil, nil, fmt.Errorf("建立日誌目錄 %q: %w", cfg.LogPath, err)
 	}
 
@@ -297,10 +296,9 @@ func newFileCore(
 	if logFileName == "" {
 		logFileName = time.Now().Format("2006-01-02") + ".log"
 	}
-	logFilePath := filepath.Join(cfg.LogPath, logFileName)
-	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	logFile, err := openSecureLogFile(cfg.LogPath, logFileName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("開啟日誌檔案 %q: %w", logFilePath, err)
+		return nil, nil, err
 	}
 
 	encoder := newEncoder(cfg.Format, encoderConfig)

@@ -1,9 +1,14 @@
 package zlogger
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestStringField(t *testing.T) {
@@ -214,5 +219,24 @@ func TestStackSkipField(t *testing.T) {
 	field := StackSkip("stack_skip", 1)
 	if field.Key != "stack_skip" {
 		t.Errorf("expected key 'stack_skip', got %s", field.Key)
+	}
+}
+
+func TestRedactedField(t *testing.T) {
+	var output bytes.Buffer
+	encoderConfig := zapcore.EncoderConfig{
+		MessageKey: "message",
+	}
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig),
+		zapcore.AddSync(&output),
+		zapcore.DebugLevel,
+	)
+	logger := zap.New(core)
+
+	logger.Info("敏感欄位測試", Redacted("authorization"))
+	encoded := output.String()
+	if !strings.Contains(encoded, `"authorization":"[REDACTED]"`) {
+		t.Fatalf("輸出未包含遮罩欄位：%s", encoded)
 	}
 }
