@@ -49,42 +49,97 @@ func hasWindowsDrivePrefix(name string) bool {
 	return first >= 'a' && first <= 'z' || first >= 'A' && first <= 'Z'
 }
 
-func secureLogPath(baseDir, leaf string) (string, error) {
-	if err := validateLogLeaf(leaf, false); err != nil {
-		return "", err
-	}
-
-	base := filepath.Clean(baseDir)
-	target := filepath.Join(base, leaf)
-	relative, err := filepath.Rel(base, target)
-	if err != nil {
-		return "", fmt.Errorf("計算日誌檔案相對路徑: %w", err)
-	}
-	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: leaf name %q 逸出基準目錄", ErrUnsafeLogPath, leaf)
-	}
-
-	return target, nil
+type rootedDirectory interface {
+	Lstat(name string) (os.FileInfo, error)
+	OpenFile(name string, flag int, perm os.FileMode) (*os.File, error)
+	Close() error
 }
 
-func openSecureLogFile(baseDir, leaf string) (*os.File, error) {
-	target, err := secureLogPath(baseDir, leaf)
-	if err != nil {
-		return nil, err
+type rootDirectoryOpener func(string) (rootedDirectory, error)
+
+func openRootedLogFiles(baseDir string, leaves ...string) ([]*os.File, error) {
+	return openRootedLogFilesWith(openLogRoot, baseDir, leaves...)
+}
+
+func openLogRoot(name string) (rootedDirectory, error) {
+	return os.OpenRoot(name)
+}
+
+func openRootedLogFilesWith(
+	openRoot rootDirectoryOpener,
+	baseDir string,
+	leaves ...string,
+) ([]*os.File, error) {
+	for _, leaf := range leaves {
+		if err := validateLogLeaf(leaf, false); err != nil {
+			return nil, err
+		}
+	}
+	if len(leaves) == 0 {
+		return []*os.File{}, nil
+	}
+	if openRoot == nil {
+		return nil, fmt.Errorf("開啟日誌 root %q: %w", baseDir, os.ErrInvalid)
 	}
 
-	info, err := os.Lstat(target)
-	switch {
-	case err == nil && info.Mode()&os.ModeSymlink != 0:
-		return nil, fmt.Errorf("%w: 目標 %q 是 symlink", ErrUnsafeLogPath, target)
-	case err != nil && !errors.Is(err, os.ErrNotExist):
-		return nil, fmt.Errorf("檢查日誌檔案 %q: %w", target, err)
+	root, err := openRoot(baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("開啟日誌 root %q: %w", baseDir, err)
 	}
 
-	//nolint:gosec // target 已通過 leaf containment 與既有 symlink 檢查。
-	file, err := os.OpenFile(target, os.O_CREATE|os.O_APPEND|os.O_WRONLY, defaultLogFileMode)
-	if err != nil {
-		return nil, fmt.Errorf("開啟日誌檔案 %q: %w", target, err)
+	files := make([]*os.File, 0, len(leaves))
+	for _, leaf := range leaves {
+		info, lstatErr := root.Lstat(leaf)
+		switch {
+		case lstatErr == nil && info.Mode()&os.ModeSymlink != 0:
+			err = fmt.Errorf("%w: 日誌 root %q 的 leaf %q 是 symlink", ErrUnsafeLogPath, baseDir, leaf)
+		case lstatErr != nil && !errors.Is(lstatErr, os.ErrNotExist):
+			err = fmt.Errorf("檢查日誌 root %q 的 leaf %q: %w", baseDir, leaf, lstatErr)
+		}
+		if err != nil {
+			return nil, cleanupRootedLogFiles(root, baseDir, files, err)
+		}
+
+		file, openErr := root.OpenFile(
+			leaf,
+			os.O_CREATE|os.O_APPEND|os.O_WRONLY,
+			defaultLogFileMode,
+		)
+		if openErr != nil {
+			err = fmt.Errorf("開啟日誌 root %q 的 leaf %q: %w", baseDir, leaf, openErr)
+			return nil, cleanupRootedLogFiles(root, baseDir, files, err)
+		}
+		files = append(files, file)
 	}
-	return file, nil
+
+	if err := root.Close(); err != nil {
+		return nil, errors.Join(
+			fmt.Errorf("關閉日誌 root %q: %w", baseDir, err),
+			closeRootedLogFiles(files),
+		)
+	}
+	return files, nil
+}
+
+func cleanupRootedLogFiles(
+	root rootedDirectory,
+	baseDir string,
+	files []*os.File,
+	cause error,
+) error {
+	rootCloseErr := root.Close()
+	if rootCloseErr != nil {
+		rootCloseErr = fmt.Errorf("關閉日誌 root %q: %w", baseDir, rootCloseErr)
+	}
+	return errors.Join(cause, closeRootedLogFiles(files), rootCloseErr)
+}
+
+func closeRootedLogFiles(files []*os.File) error {
+	closeErrs := make([]error, 0, len(files))
+	for index := len(files) - 1; index >= 0; index-- {
+		if err := files[index].Close(); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("關閉 partial 日誌檔案: %w", err))
+		}
+	}
+	return errors.Join(closeErrs...)
 }

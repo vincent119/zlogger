@@ -195,10 +195,4 @@ files, err := openRootedLogFiles(cfg.LogPath, logFileName)
 
 ## README 覆蓋率說明
 
-目前 README 頂部的 Codecov badge 在工具鏈基線提交中被移除，原因是 CI 已移除 Codecov 上傳與 token 相依，改由 repository 自身的 90% coverage gate 驗證。若要恢復顯示，應另選以下方案：
-
-1. 恢復 Codecov 或其他 coverage service，提供動態實際百分比。
-2. 顯示「coverage gate ≥ 90%」政策 badge，明確避免冒充即時實際值。
-3. 由 CI 產生 badge JSON 並發布到可信任位置，但需新增 write permission 與發布流程。
-
-本 spec 不選擇方案，避免安全修正同時擴張 CI 權限。
+Codecov 上傳與 README badge 已由獨立 PR #7 恢復，並由遠端 coverage job 驗證成功。本 spec 以該合併結果為基線，不修改 Codecov Action、secret、workflow permission、90% coverage gate 或 badge。

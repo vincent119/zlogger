@@ -392,8 +392,10 @@ func Info(msg string, fields ...Field) {
 - 路徑錯誤以 `ErrUnsafeLogPath` 分類；Config 同時保留 `ErrInvalidConfig`。
 - 新目錄 mode 為 `0700`，新檔 mode 為 `0600`；umask 可進一步收緊。
 - 不對既有目錄或檔案執行 chmod，避免改變共享資源權限。
-- 最終目標已是 symlink 時拒絕開啟，不跟隨或覆寫。
-- 最低版本已升至 Go 1.25，但目前實作仍使用 `Lstat` 後開檔，仍有 TOCTOU race；後續以獨立 TDD 變更採用 `os.Root`，不得把工具鏈升版誤認為安全行為已完成。
+- 每批檔案先以 `os.OpenRoot` 開啟可信任 base，再以 root-relative leaf 執行 `Root.Lstat` 與 `Root.OpenFile`；SplitOutput 同批三檔共用單一 root。
+- 最終目標穩定存在為 symlink 時拒絕開啟，不跟隨或覆寫；若在檢查後並行替換，`Root.OpenFile` 保證解析結果不逸出 root。
+- `os.Root` 不等同 filesystem sandbox：`OpenRoot` 會跟隨 base path symlink，且不防 mount boundary、bind mount、特殊裝置或惡意 filesystem。競態中的 root 內 symlink 可能被跟隨，不承諾原子拒絕所有 symlink。
+- Go `js`、`plan9`、`wasip1` 另有標準庫限制；目前跨平台 CI 契約為 Linux、macOS 與 Windows。
 - 敏感欄位採白名單；token、密碼、Authorization、cookie 與完整個資不得進入日誌。
 - `Redacted` 需由呼叫端主動使用，不提供自動 redaction。
 

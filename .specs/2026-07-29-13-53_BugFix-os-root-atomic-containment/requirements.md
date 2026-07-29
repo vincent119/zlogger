@@ -4,7 +4,7 @@
 
 - Type：BugFix
 - Owner：待確認
-- Status：Planned
+- Status：InProgress
 - 前置規格：`.specs/2026-07-29-11-18_BugFix-file-output-security-boundary/`
 - 前置基線：`.specs/2026-07-29-11-48_Chore-go-toolchain-ci-baseline/`
 
@@ -14,7 +14,7 @@
 
 目前 module 最低版本已升至 Go 1.25，CI 也已在 Go 1.25.11、Go 1.26.5、macOS 15 與 Windows 2025 驗證，因此可使用標準庫 `os.Root`。本 spec 只替換檔案開啟 containment 機制，不重寫已完成的 Config、SplitOutput 生命週期、leaf 規則、權限或 redaction。
 
-README 覆蓋率 badge 不屬於本安全修正；其恢復策略需另行決定，避免把固定百分比誤當動態量測。
+README 覆蓋率 badge 與 Codecov 上傳已由獨立 PR #7 恢復，不屬於本安全修正差異。
 
 ## 背景
 
@@ -172,4 +172,4 @@ README 覆蓋率 badge 不屬於本安全修正；其恢復策略需另行決定
 
 ## 待確認項目
 
-- 無。README 覆蓋率 badge 是否恢復屬於另一項文件決策。
+- 無。
