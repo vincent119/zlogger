@@ -129,6 +129,7 @@ then zlogger applies defaults and validation.
 | [Security](docs/en/security.md) | Safe leaves, `os.Root`, permissions, and sensitive data |
 | [Gin integration](docs/en/integrations/gin.md) | Caller-owned middleware example |
 | [timberjack integration](docs/en/integrations/timberjack.md) | Size, retention, compression, and three-file rotation |
+| [Changelog](CHANGELOG.en.md) | Additions, changes, fixes, and compatibility notes by release |
 
 [Open the English documentation index](docs/en/README.md) | [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger)
 

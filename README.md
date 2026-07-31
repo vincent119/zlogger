@@ -126,6 +126,7 @@ Configure。不需要 global 狀態時，使用 `New`／`NewWithOptions` 持有 
 | [安全性](docs/zh-TW/security.md) | safe leaf、`os.Root`、permissions、敏感資料 |
 | [Gin 整合](docs/zh-TW/integrations/gin.md) | 引用端 middleware 範例 |
 | [timberjack 整合](docs/zh-TW/integrations/timberjack.md) | 容量、保留、壓縮與三檔 rotation |
+| [變更紀錄](CHANGELOG.md) | 各版本新增、變更、修正與相容性注意事項 |
 
 [開啟繁體中文文件首頁](docs/zh-TW/README.md) | [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger)
 
