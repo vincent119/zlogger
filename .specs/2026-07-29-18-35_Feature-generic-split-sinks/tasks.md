@@ -1,13 +1,13 @@
 # 任務文件：通用分級 Sink
 
-Status: InProgress
+Status: Complete
 
 ## Execution Context
 
 - 意圖：新增公開 `SplitSinks`／`NewSplitCore`，讓外部 `zapcore.WriteSyncer` 可使用既有
   DEBUG／INFO、WARN、ERROR 以上分級路由
-- 本輪授權：使用者已指示執行及交付 tasks；T1 至 T6 已完成，本輪可 commit、push 並
-  準備 PR 內容；受限 Token 不建立 PR，T7 遠端 CI 與 T8 回填仍待後續驗收
+- 本輪授權：使用者已指示執行、交付及完成驗收；PR #24 已合併且遠端 CI 全綠，
+  T1 至 T8 均完成，本分支只回填 spec 證據
 - 非目標：不加入 timberjack dependency／Adapter，不公開 Factory，不修改每日換檔、
   `SplitOutput` lifecycle、安全開檔、Config 或 CI
 - 已定決策：新 API 接收 `zapcore.Encoder` 與三個 sinks；每路 clone encoder；sink ownership
@@ -57,8 +57,8 @@ Status: InProgress
 | T4 讓既有 GetSplitCore 共用 helper | T3 | Complete | 原 routing 與 cleanup 回歸通過 |
 | T5 新增可編譯 example 與文件 | T3、T4 | Complete | example 與分級 rotation 文件通過 |
 | T6 完整品質與相容驗證 | T2 至 T5 | Complete | 92.7% coverage、race、lint 與 benchmark 通過 |
-| T7 遠端跨平台驗收 | T6 | Planned | 需另行取得 push／PR 授權 |
-| T8 回填 spec 完成狀態 | T7 | Planned | 僅在遠端 green 後完成 |
+| T7 遠端跨平台驗收 | T6 | Complete | PR #24 九項 CI 全數通過 |
+| T8 回填 spec 完成狀態 | T7 | Complete | 狀態與遠端證據已回填 |
 
 ## 實作任務
 
@@ -159,19 +159,19 @@ Status: InProgress
     - `git diff --name-only` 僅包含 Allowed Changes
     - `git status --short` 不新增 coverage、profile 或其他產物
 
-- [ ] T7 遠端 CI 與跨平台驗收
-  - Status: Planned
+- [x] T7 遠端 CI 與跨平台驗收
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 tasks Implementation Notes
     - Forbidden：未經授權 commit／push／PR；為通過 CI 修改 workflow、skip 或測試語意
   - Depends：T6
-  - Context：使用者另行授權 commit／push 並建立 PR 後，確認 Go 1.25.11／1.26.5、
+  - Context：使用者另行授權 commit／push 並建立 PR 後，確認 Go 1.25.12／1.26.5、
     macOS、Windows、lint、coverage、benchmark 既有 jobs 全數通過。新 API 不應依賴
     Unix 檔案語意或 timberjack。
   - Verify：`gh pr checks` 或 `gh run view` 顯示所有既有必要 jobs pass
 
-- [ ] T8 回填規格完成狀態與證據
-  - Status: Planned
+- [x] T8 回填規格完成狀態與證據
+  - Status: Complete
   - Boundary:
     - Allowed Changes：本 spec 三份文件
     - Forbidden：產品碼、README、DESIGN、其他 spec 與 release 檔
@@ -256,6 +256,22 @@ rg -n '^#|^##|^###|Boundary:|Depends:|Implementation Notes|Status:' \
   完成，requirements／design／tasks 保持 InProgress，等待 T7 遠端 CI 與 T8 回填。
 - 2026-07-31：使用者授權進入交付階段；本輪提交並推送 Feature branch，由使用者透過
   GitHub 網頁建立 PR，建立後再執行 T7 遠端 CI 驗收。
+- 2026-07-31：PR #24 已合併為 `3c2382949713ad981c42d57b85a6951097e63b74`；
+  GitHub Actions run `30601798998` 的 Go 1.25.12／1.26.5 race、兩版漏洞掃描、
+  macOS 15、Windows 2025、靜態與格式、coverage、benchmark 共九項工作全部通過，
+  完成 T7。
+- 2026-07-31：完成 T8；requirements、design、tasks 已標記 Complete，遠端 PR、merge
+  commit、run 與 jobs 證據一致。此文件回填不修改產品碼、測試、README 或 DESIGN。
+
+## 驗證結果摘要
+
+- 新行為驗證：通過；七個標準 level 分級、nil 驗證、Sync、Close ownership 與 example
+  均有測試
+- 回歸驗證：通過；完整 race、新舊 routing 連續 20 次及既有 SplitOutput lifecycle 通過
+- 品質驗證：通過；golangci-lint 0 issues、92.7% coverage、benchmark 與 dependency diff
+  通過
+- 遠端驗證：通過；PR #24 的九項 CI 全數成功並已合併
+- 剩餘風險：typed nil 與同一 sink 重用不在契約保證範圍，README 與 Go doc 已明確說明
 
 ## 後續改善
 
