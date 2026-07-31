@@ -287,7 +287,32 @@ logs/
    - `Sync` 會將三個目前開啟的檔案同步至儲存裝置
    - 關閉後的 Write 與 Sync 會回傳包裝 `os.ErrClosed` 的錯誤
 
-### 7.2 與 timberjack 的差異
+### 7.2 通用分級 Sink
+
+`NewSplitCore` 將 level routing 與實際輸出資源分離。呼叫端提供 `SplitSinks.Info`、
+`SplitSinks.Warn`、`SplitSinks.Error` 三個 `zapcore.WriteSyncer`，zlogger 為每路 clone
+encoder 並建立 `zapcore.NewTee`：
+
+```text
+DEBUG、INFO               → Info sink
+WARN                      → Warn sink
+ERROR、DPANIC、PANIC、FATAL → Error sink
+```
+
+新 API 只負責靜態 routing，不建立檔案、不啟動 goroutine、不執行 rotation，也不取得
+外部 sink 的 Close ownership。呼叫端必須提供三個有效且獨立的 sink，停止 logger 後
+先執行 `Sync`，再依自身生命週期關閉底層資源。nil interface 會在建構時以
+`ErrInvalidSplitCore` 拒絕；typed nil 不在保證範圍。
+
+現有 `GetSplitCoreWithOptions` 仍建立並擁有 `SplitOutput`，但與 `NewSplitCore` 共用同一份
+core routing helper，避免 DEBUG 或其他 level 規則在兩條路徑漂移。現有 cleanup、每日
+換檔、權限與 `os.Root` 安全契約不變。
+
+不公開 `WriteSyncerFactory`。rotation sink 建構後即可自行管理容量或時間換檔，Factory
+會額外引入動態替換及 Close ownership；若未來出現真實 runtime replacement 需求，應
+另立規格處理。
+
+### 7.3 與 timberjack 的差異
 
 | 功能 | split_output.go | timberjack |
 |------|-----------------|------------|
@@ -303,7 +328,7 @@ logs/
 
 - 需要按級別分離 → 使用 `GetSplitCore()`
 - 需要大小限制/壓縮/時間輪轉 → 使用 timberjack
-- 兩者可結合使用
+- 需要分級及大小限制／壓縮 → 建立三個 timberjack sink，透過 `NewSplitCore()` 組合
 
 ---
 
@@ -311,7 +336,8 @@ logs/
 
 ### 8.1 設計決策
 
-**zlogger 不內建完整 log rotation**，`SplitOutput` 只負責每日換檔。大小限制、備份與壓縮交由外部元件，理由如下：
+**zlogger 不內建完整 log rotation**，`SplitOutput` 只負責每日換檔，`NewSplitCore`
+只負責外部 sink 的 level routing。大小限制、備份與壓縮交由外部元件，理由如下：
 
 1. **保持 lib 輕量** - 只依賴 zap
 2. **避免強制依賴** - 不是所有專案都需要
@@ -329,9 +355,13 @@ tjLogger := &timberjack.Logger{
     MaxSize:    100,   // MB
     MaxBackups: 10,
     MaxAge:     30,    // days
-    Compress:   true,  // gzip 壓縮
+    Compression: "gzip",
 }
 ```
+
+需要分級 rotation 時建立 info、warn、error 三個獨立 timberjack logger，再以
+`NewSplitCore` 組合。此路徑不使用 `SplitOutput`，因此只有 timberjack 管理 rotation；
+三個 logger 的 `Close` 仍由呼叫端負責。
 
 詳細範例請參考 README.md。
 

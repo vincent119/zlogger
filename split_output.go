@@ -22,6 +22,57 @@ type writeSyncCloser interface {
 	Close() error
 }
 
+// ErrInvalidSplitCore 表示分級 core 缺少必要的 encoder 或 sink。
+var ErrInvalidSplitCore = errors.New("分級 core 設定無效")
+
+// SplitSinks 定義標準日誌級別的三路輸出。
+//
+// Info 接收 DEBUG 與 INFO，Warn 接收 WARN，Error 接收 ERROR 以上級別。
+// 三個欄位應使用不同的 sink，且資源所有權始終屬於呼叫端。
+type SplitSinks struct {
+	Info  zapcore.WriteSyncer
+	Warn  zapcore.WriteSyncer
+	Error zapcore.WriteSyncer
+}
+
+// NewSplitCore 使用呼叫端提供的 encoder 與 sinks 建立分級 core。
+//
+// 本函式會為每路輸出複製 encoder，不取得 sinks 的資源所有權，也不負責關閉 sinks。
+// 呼叫端應在 logger 停止使用後先執行 Sync，再自行關閉可關閉的底層資源。
+func NewSplitCore(encoder zapcore.Encoder, sinks SplitSinks) (zapcore.Core, error) {
+	if encoder == nil {
+		return nil, fmt.Errorf("%w: encoder 不可為 nil", ErrInvalidSplitCore)
+	}
+	if sinks.Info == nil {
+		return nil, fmt.Errorf("%w: info sink 不可為 nil", ErrInvalidSplitCore)
+	}
+	if sinks.Warn == nil {
+		return nil, fmt.Errorf("%w: warn sink 不可為 nil", ErrInvalidSplitCore)
+	}
+	if sinks.Error == nil {
+		return nil, fmt.Errorf("%w: error sink 不可為 nil", ErrInvalidSplitCore)
+	}
+	return buildSplitCore(encoder, sinks), nil
+}
+
+func buildSplitCore(encoder zapcore.Encoder, sinks SplitSinks) zapcore.Core {
+	infoLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+		return level == zapcore.DebugLevel || level == zapcore.InfoLevel
+	})
+	warnLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+		return level == zapcore.WarnLevel
+	})
+	errorLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+		return level >= zapcore.ErrorLevel
+	})
+
+	return zapcore.NewTee(
+		zapcore.NewCore(encoder.Clone(), sinks.Info, infoLevel),
+		zapcore.NewCore(encoder.Clone(), sinks.Warn, warnLevel),
+		zapcore.NewCore(encoder.Clone(), sinks.Error, errorLevel),
+	)
+}
+
 type splitFileSet struct {
 	info  writeSyncCloser
 	warn  writeSyncCloser
@@ -453,21 +504,10 @@ func GetSplitCoreWithOptions(
 	infoOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.InfoLevel})
 	warnOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.WarnLevel})
 	errorOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.ErrorLevel})
-
-	infoLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
-		return level == zapcore.DebugLevel || level == zapcore.InfoLevel
+	core := buildSplitCore(encoder, SplitSinks{
+		Info:  infoOut,
+		Warn:  warnOut,
+		Error: errorOut,
 	})
-	warnLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
-		return level == zapcore.WarnLevel
-	})
-	errorLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
-		return level >= zapcore.ErrorLevel
-	})
-
-	core := zapcore.NewTee(
-		zapcore.NewCore(encoder, infoOut, infoLevel),
-		zapcore.NewCore(encoder, warnOut, warnLevel),
-		zapcore.NewCore(encoder, errorOut, errorLevel),
-	)
 	return core, func() { _ = splitOut.Close() }, nil
 }

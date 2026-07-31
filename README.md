@@ -630,6 +630,31 @@ defer func() {
 `WithDirPerm`、`WithFilePerm`。既有 `GetSplitCore` 保持 `0700`／`0600`
 安全預設。
 
+### 注入自訂分級 Sink
+
+`NewSplitCore` 可將三個既有的 `zapcore.WriteSyncer` 組成分級 core，適合接入
+timberjack、記憶體輸出或其他自訂 sink：
+
+```go
+core, err := zlogger.NewSplitCore(
+    zapcore.NewJSONEncoder(encoderConfig),
+    zlogger.SplitSinks{
+        Info:  infoSink,
+        Warn:  warnSink,
+        Error: errorSink,
+    },
+)
+if err != nil {
+    return err
+}
+logger := zap.New(core)
+```
+
+`Info` 接收 DEBUG、INFO，`Warn` 接收 WARN，`Error` 接收 ERROR 以上級別。
+三個欄位應使用不同 sink。`NewSplitCore` 不取得外部資源 ownership，也不會呼叫
+sink 的 `Close`；呼叫端應在 logger 停止使用後先執行 `Sync`，再關閉三個 sink。
+傳入 typed nil 不在輸入驗證保證範圍，必要欄位應提供有效實例。
+
 ## Log Rotation（使用 timberjack）
 
 `SplitOutput` 僅提供每日換檔，不包含大小限制、備份數量與壓縮等完整 log rotation 功能。需要這些能力時，建議使用 [timberjack](https://github.com/DeRuina/timberjack) 處理：
@@ -643,9 +668,9 @@ package main
 
 import (
     "github.com/DeRuina/timberjack"
+    "github.com/vincent119/zlogger"
     "go.uber.org/zap"
     "go.uber.org/zap/zapcore"
-    "github.com/vincent119/zlogger"
 )
 
 func main() {
@@ -655,7 +680,7 @@ func main() {
         MaxSize:    100,   // 單檔最大大小（MB）
         MaxBackups: 10,    // 最大備份數
         MaxAge:     30,    // 保存天數
-        Compress:   true,  // 是否壓縮舊日誌（gzip）
+        Compression: "gzip",
     }
 
     // 建立編碼器配置
@@ -682,6 +707,10 @@ func main() {
 
     // 建立 logger
     logger := zap.New(core, zap.AddCaller())
+    defer func() {
+        _ = logger.Sync()
+        _ = tjLogger.Close()
+    }()
     zap.ReplaceGlobals(logger)
 
     // 現在可以使用 zlogger 的函數（如果需要）
@@ -689,6 +718,47 @@ func main() {
     logger.Info("伺服器啟動", zap.String("port", "8080"))
 }
 ```
+
+### timberjack 分級 rotation
+
+建立三個獨立 timberjack sink 後，可透過 `NewSplitCore` 同時取得分級、容量、保留與
+壓縮能力：
+
+```go
+infoSink := &timberjack.Logger{
+    Filename: "./logs/app-info.log", MaxSize: 100,
+    MaxBackups: 10, MaxAge: 30, Compression: "gzip",
+}
+warnSink := &timberjack.Logger{
+    Filename: "./logs/app-warn.log", MaxSize: 100,
+    MaxBackups: 10, MaxAge: 30, Compression: "gzip",
+}
+errorSink := &timberjack.Logger{
+    Filename: "./logs/app-error.log", MaxSize: 100,
+    MaxBackups: 10, MaxAge: 30, Compression: "gzip",
+}
+
+core, err := zlogger.NewSplitCore(
+    zapcore.NewJSONEncoder(encoderConfig),
+    zlogger.SplitSinks{
+        Info: infoSink, Warn: warnSink, Error: errorSink,
+    },
+)
+if err != nil {
+    return err
+}
+logger := zap.New(core)
+defer func() {
+    _ = logger.Sync()
+    _ = infoSink.Close()
+    _ = warnSink.Close()
+    _ = errorSink.Close()
+}()
+```
+
+此模式不使用 `SplitOutput`，避免兩個元件同時管理 rotation。每個檔案只能由一個
+process 使用 timberjack 寫入；多 process 部署應使用不同檔名或改由外部 log collector
+統一處理。
 
 ### 搭配 zlogger 使用
 
