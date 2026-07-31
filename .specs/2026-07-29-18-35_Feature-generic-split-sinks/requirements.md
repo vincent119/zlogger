@@ -1,6 +1,6 @@
 # 需求文件：通用分級 Sink
 
-Status: InProgress
+Status: Complete
 
 ## 文件定位
 
