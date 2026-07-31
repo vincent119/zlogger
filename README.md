@@ -47,13 +47,6 @@ flowchart LR
 go get github.com/vincent119/zlogger
 ```
 
-最新 tag `v1.0.5` 尚未包含本 README 對 `main` 描述的 `Configure`、`ConfigPatch`、
-`NewSplitCore` 等 API。正式環境使用已發布 tag；發布前僅供評估時可明確使用：
-
-```bash
-go get github.com/vincent119/zlogger@main
-```
-
 ## 快速開始
 
 ```go

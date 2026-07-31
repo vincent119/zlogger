@@ -49,14 +49,6 @@ Go 1.25 or later is required.
 go get github.com/vincent119/zlogger
 ```
 
-The latest tag, `v1.0.5`, does not include APIs documented from `main`, including `Configure`,
-`ConfigPatch`, and `NewSplitCore`. Production builds should use a released tag. Before the next
-release, use the following only for evaluation:
-
-```bash
-go get github.com/vincent119/zlogger@main
-```
-
 ## Quick Start
 
 ```go
