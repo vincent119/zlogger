@@ -248,7 +248,7 @@ func configureResolvedWithOptions(
 
 func buildEncoderConfig(cfg *Config) zapcore.EncoderConfig {
 	var levelEncoder zapcore.LevelEncoder
-	if cfg.ColorEnabled {
+	if cfg.Format == "console" && cfg.ColorEnabled {
 		levelEncoder = zapcore.CapitalColorLevelEncoder
 	} else {
 		levelEncoder = zapcore.CapitalLevelEncoder

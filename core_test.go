@@ -2,6 +2,7 @@ package zlogger
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -40,6 +41,48 @@ func TestParseLevel(t *testing.T) {
 			result := parseLevel(tt.input)
 			if result != tt.expected {
 				t.Errorf("parseLevel(%q) = %v, want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBuildEncoderConfigColorContract(t *testing.T) {
+	tests := []struct {
+		name      string
+		format    string
+		enabled   bool
+		wantColor bool
+	}{
+		{name: "console 啟用顏色", format: "console", enabled: true, wantColor: true},
+		{name: "console 停用顏色", format: "console", enabled: false, wantColor: false},
+		{name: "JSON 啟用顏色", format: "json", enabled: true, wantColor: false},
+		{name: "JSON 停用顏色", format: "json", enabled: false, wantColor: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{Format: tt.format, ColorEnabled: tt.enabled}
+			entry := zapcore.Entry{Level: zap.InfoLevel, Message: "測試訊息"}
+			encoded, err := newEncoder(tt.format, buildEncoderConfig(cfg)).EncodeEntry(entry, nil)
+			if err != nil {
+				t.Fatalf("編碼日誌失敗：%v", err)
+			}
+			t.Cleanup(encoded.Free)
+
+			level := encoded.String()
+			if tt.format == "json" {
+				var output struct {
+					Level string `json:"level"`
+				}
+				if err := json.Unmarshal(encoded.Bytes(), &output); err != nil {
+					t.Fatalf("解析 JSON 日誌失敗：%v", err)
+				}
+				level = output.Level
+			}
+
+			if gotColor := strings.Contains(level, "\x1b["); gotColor != tt.wantColor {
+				t.Errorf("format=%s color_enabled=%t 的 level=%q，顏色狀態=%t，預期=%t",
+					tt.format, tt.enabled, level, gotColor, tt.wantColor)
 			}
 		})
 	}
