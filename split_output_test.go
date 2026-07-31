@@ -1,6 +1,7 @@
 package zlogger
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -20,6 +21,39 @@ type recordingWriteSyncCloser struct {
 	syncCalls  int
 	closeErr   error
 	syncErr    error
+}
+
+type recordingSplitSink struct {
+	mu         sync.Mutex
+	buffer     bytes.Buffer
+	syncCalls  int
+	closeCalls int
+}
+
+func (s *recordingSplitSink) Write(data []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buffer.Write(data)
+}
+
+func (s *recordingSplitSink) Sync() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.syncCalls++
+	return nil
+}
+
+func (s *recordingSplitSink) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeCalls++
+	return nil
+}
+
+func (s *recordingSplitSink) snapshot() (content string, syncCalls, closeCalls int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buffer.String(), s.syncCalls, s.closeCalls
 }
 
 type manualRotationTimer struct {
@@ -118,6 +152,165 @@ func (r *recordingWriteSyncCloser) counts() (syncCalls, closeCalls int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.syncCalls, r.closeCalls
+}
+
+func TestNewSplitCoreRoutesLevels(t *testing.T) {
+	infoSink := &recordingSplitSink{}
+	warnSink := &recordingSplitSink{}
+	errorSink := &recordingSplitSink{}
+	encoder := zapcore.NewJSONEncoder(zapcore.EncoderConfig{MessageKey: "message"})
+
+	core, err := NewSplitCore(encoder, SplitSinks{
+		Info:  infoSink,
+		Warn:  warnSink,
+		Error: errorSink,
+	})
+	if err != nil {
+		t.Fatalf("建立通用分級 core 失敗：%v", err)
+	}
+
+	tests := []struct {
+		name    string
+		level   zapcore.Level
+		message string
+		target  string
+	}{
+		{name: "debug", level: zapcore.DebugLevel, message: "debug-message", target: "info"},
+		{name: "info", level: zapcore.InfoLevel, message: "info-message", target: "info"},
+		{name: "warn", level: zapcore.WarnLevel, message: "warn-message", target: "warn"},
+		{name: "error", level: zapcore.ErrorLevel, message: "error-message", target: "error"},
+		{name: "dpanic", level: zapcore.DPanicLevel, message: "dpanic-message", target: "error"},
+		{name: "panic", level: zapcore.PanicLevel, message: "panic-message", target: "error"},
+		{name: "fatal", level: zapcore.FatalLevel, message: "fatal-message", target: "error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checked := core.Check(zapcore.Entry{Level: tt.level, Message: tt.message}, nil)
+			if checked == nil {
+				t.Fatalf("level %s 應啟用", tt.level)
+			}
+			checked.Write()
+		})
+	}
+
+	infoContent, _, _ := infoSink.snapshot()
+	warnContent, _, _ := warnSink.snapshot()
+	errorContent, _, _ := errorSink.snapshot()
+	contents := map[string]string{
+		"info":  infoContent,
+		"warn":  warnContent,
+		"error": errorContent,
+	}
+	for _, tt := range tests {
+		for sinkName, content := range contents {
+			contains := strings.Contains(content, tt.message)
+			if sinkName == tt.target && !contains {
+				t.Errorf("%s 應寫入 %s sink", tt.message, tt.target)
+			}
+			if sinkName != tt.target && contains {
+				t.Errorf("%s 不應寫入 %s sink", tt.message, sinkName)
+			}
+		}
+	}
+}
+
+func TestNewSplitCoreRejectsInvalidInputs(t *testing.T) {
+	newEncoder := func() zapcore.Encoder {
+		return zapcore.NewJSONEncoder(zapcore.EncoderConfig{MessageKey: "message"})
+	}
+	newSinks := func() SplitSinks {
+		return SplitSinks{
+			Info:  &recordingSplitSink{},
+			Warn:  &recordingSplitSink{},
+			Error: &recordingSplitSink{},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		encoder zapcore.Encoder
+		sinks   SplitSinks
+	}{
+		{name: "缺少 encoder", sinks: newSinks()},
+		{name: "缺少 info", encoder: newEncoder(), sinks: func() SplitSinks {
+			sinks := newSinks()
+			sinks.Info = nil
+			return sinks
+		}()},
+		{name: "缺少 warn", encoder: newEncoder(), sinks: func() SplitSinks {
+			sinks := newSinks()
+			sinks.Warn = nil
+			return sinks
+		}()},
+		{name: "缺少 error", encoder: newEncoder(), sinks: func() SplitSinks {
+			sinks := newSinks()
+			sinks.Error = nil
+			return sinks
+		}()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core, err := NewSplitCore(tt.encoder, tt.sinks)
+			if core != nil {
+				t.Fatal("無效輸入不應回傳部分 core")
+			}
+			if !errors.Is(err, ErrInvalidSplitCore) {
+				t.Fatalf("錯誤 = %v，預期 ErrInvalidSplitCore", err)
+			}
+		})
+	}
+}
+
+func TestNewSplitCoreSyncsSinks(t *testing.T) {
+	infoSink := &recordingSplitSink{}
+	warnSink := &recordingSplitSink{}
+	errorSink := &recordingSplitSink{}
+	core, err := NewSplitCore(
+		zapcore.NewJSONEncoder(zapcore.EncoderConfig{MessageKey: "message"}),
+		SplitSinks{Info: infoSink, Warn: warnSink, Error: errorSink},
+	)
+	if err != nil {
+		t.Fatalf("建立通用分級 core 失敗：%v", err)
+	}
+
+	if err := core.Sync(); err != nil {
+		t.Fatalf("同步通用分級 core 失敗：%v", err)
+	}
+	for name, sink := range map[string]*recordingSplitSink{
+		"info": infoSink, "warn": warnSink, "error": errorSink,
+	} {
+		_, syncCalls, _ := sink.snapshot()
+		if syncCalls != 1 {
+			t.Errorf("%s sink Sync 次數 = %d，預期 1", name, syncCalls)
+		}
+	}
+}
+
+func TestNewSplitCoreDoesNotCloseSinks(t *testing.T) {
+	infoSink := &recordingSplitSink{}
+	warnSink := &recordingSplitSink{}
+	errorSink := &recordingSplitSink{}
+	core, err := NewSplitCore(
+		zapcore.NewJSONEncoder(zapcore.EncoderConfig{MessageKey: "message"}),
+		SplitSinks{Info: infoSink, Warn: warnSink, Error: errorSink},
+	)
+	if err != nil {
+		t.Fatalf("建立通用分級 core 失敗：%v", err)
+	}
+
+	if err := core.Sync(); err != nil {
+		t.Fatalf("同步通用分級 core 失敗：%v", err)
+	}
+	for name, sink := range map[string]*recordingSplitSink{
+		"info": infoSink, "warn": warnSink, "error": errorSink,
+	} {
+		_, _, closeCalls := sink.snapshot()
+		if closeCalls != 0 {
+			t.Errorf("%s sink Close 次數 = %d，預期 0", name, closeCalls)
+		}
+	}
 }
 
 func TestNewSplitOutput(t *testing.T) {
