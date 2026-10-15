@@ -563,7 +563,7 @@ SplitOutput 基線：
 ### 14.1 Go 支援政策
 
 - `go.mod` 最低版本為 Go 1.25.0，不加入 `toolchain` directive。
-- CI 最低版本固定為 Go 1.25.12，現行版本固定為 Go 1.26.5。
+- CI 相容性最低版本固定為 Go 1.25.12，安全掃描與現行版本固定為 Go 1.26.9。
 - 新的 security patch 由獨立 PR 更新精確版本，不使用 `stable` 或浮動版本。
 - 提高最低 minor 版本屬 build-time 相容性變更，必須在 README 與 PR 說明。
 
@@ -571,9 +571,9 @@ SplitOutput 基線：
 
 | Job | Runner | 驗證 |
 |-----|--------|------|
-| Race | Ubuntu 24.04 | Go 1.25.12、1.26.5 執行 `-race` |
-| Vulnerability | Ubuntu 24.04 | Go 1.25.12、1.26.5 執行 govulncheck v1.6.0 |
-| Portability | macOS 15、Windows 2025 | Go 1.26.5 一般測試 |
+| Race | Ubuntu 24.04 | Go 1.25.12、1.26.9 執行 `-race` |
+| Vulnerability | Ubuntu 24.04 | Go 1.26.9 執行 govulncheck v1.6.0；Go 1.25 僅保留相容性驗證 |
+| Portability | macOS 15、Windows 2025 | Go 1.26.9 一般測試 |
 | Lint | Ubuntu 24.04 | golangci-lint v2.12.2、go vet、格式 |
 | Coverage | Ubuntu 24.04 | atomic coverage 不低於 90% |
 | Benchmark | Ubuntu 24.04 | logger benchmark smoke test |

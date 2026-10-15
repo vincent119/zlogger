@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_CURRENT_VERSION: "1.26.5"
+  GO_CURRENT_VERSION: "1.26.9"
   GOLANGCI_LINT_VERSION: "2.12.2"
   GOVULNCHECK_VERSION: "1.6.0"
 
@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.25.12", "1.26.5"]
+        go-version: ["1.25.12", "1.26.9"]
 
     steps:
       - name: 檢出程式碼
@@ -54,7 +54,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.25.12", "1.26.5"]
+        # Go 1.25 保留相容性測試；安全掃描使用已修補的工具鏈。
+        go-version: ["1.26.9"]
 
     steps:
       - name: 檢出程式碼

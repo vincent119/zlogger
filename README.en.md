@@ -151,7 +151,7 @@ Primary sentinel errors are `ErrInvalidConfig`, `ErrAlreadyConfigured`, `ErrUnsa
 make verify
 ```
 
-CI runs race tests and vulnerability scans with Go 1.25.12 and Go 1.26.5. Compatibility is
+CI runs race tests with Go 1.25.12 and Go 1.26.9, and vulnerability scans with Go 1.26.9. Compatibility is
 verified on Linux, macOS 15, and Windows 2025. The coverage threshold is 90%, and results are
 uploaded to Codecov.
 

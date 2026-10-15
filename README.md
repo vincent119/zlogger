@@ -148,7 +148,7 @@ Configure。不需要 global 狀態時，使用 `New`／`NewWithOptions` 持有 
 make verify
 ```
 
-CI 使用 Go 1.25.12 與 Go 1.26.5 執行 race test 與 vulnerability scan，並在 Linux、
+CI 使用 Go 1.25.12 與 Go 1.26.9 執行 race test，使用 Go 1.26.9 執行 vulnerability scan，並在 Linux、
 macOS 15、Windows 2025 驗證相容性。coverage 門檻為 90%，結果上傳 Codecov。
 
 ## License
