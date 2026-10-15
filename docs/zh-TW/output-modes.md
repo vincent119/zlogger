@@ -10,10 +10,18 @@
 | --- | --- | --- | --- |
 | console 或單檔 | `Configure`／`New` | 無 | cleanup／Instance |
 | 每日三檔 | `GetSplitCore` | 每日 | 回傳的 cleanup |
+| 每日三檔與關閉錯誤 | `GetSplitCoreWithCleanup` | 每日 | 先 Sync，再呼叫 `func() error` |
+| 獨立每日 logger | `NewSplit` | 每日 | Instance.Close 自動 Sync／Close |
+| 全域每日 logger | `ConfigureSplit` | 每日 | cleanup 自動 Sync／Close |
+| 全域 custom core | `ConfigureCore` | 由 core 決定 | WithCoreCleanup 明確登記清理 |
 | 直接持有每日三檔 | `NewSplitOutput`／`NewSplitOutputWithOptions` | 每日 | 呼叫端 Close |
 | 自訂三路 sink | `NewSplitCore` | 由 sink 決定 | 呼叫端管理 sinks |
 
 `Config.Outputs` 的 `file` 是單一檔案，不會自動建立 `SplitOutput`。
+
+`GetSplitCoreWithCleanup` 接受既有前三個參數與可選 FileOutputOption，回傳
+`(core, func() error, error)`，保留 Close 錯誤，不自動 Sync 或設定 globals。
+NewSplit／ConfigureSplit 僅建立每日三檔，Outputs 不控制輸出。
 
 ## 每日分級
 

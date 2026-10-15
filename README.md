@@ -1,5 +1,10 @@
 # zlogger
 
+每日 core 需要回傳關閉錯誤時使用 `GetSplitCoreWithCleanup`；獨立每日 logger 使用
+`NewSplit`，全域每日 logger 使用 `ConfigureSplit`，自訂 core 全域設定使用 `ConfigureCore`。
+新 global cleanup 與 split Instance.Close 自動 Sync，再關閉自有資源；外部資源僅執行
+`WithCoreCleanup` 明確登記的清理。欄位與 ownership 詳見[生命週期](docs/zh-TW/lifecycle.md)。
+
 [![GitHub](https://img.shields.io/badge/github-vincent119/zlogger-blue?logo=github)](https://github.com/vincent119/zlogger)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)

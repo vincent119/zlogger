@@ -1,5 +1,10 @@
 # zlogger
 
+Use GetSplitCoreWithCleanup for daily cores with Close error propagation, NewSplit for independent
+daily instances, ConfigureSplit for daily globals, and ConfigureCore for custom globals. New
+global cleanup and split Instance.Close sync before closing owned resources. External cleanup
+requires explicit WithCoreCleanup registration. See [Lifecycle](docs/en/lifecycle.md).
+
 [![GitHub](https://img.shields.io/badge/github-vincent119/zlogger-blue?logo=github)](https://github.com/vincent119/zlogger)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
