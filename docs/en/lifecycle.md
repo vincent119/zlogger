@@ -33,6 +33,12 @@ errors and may panic on initialization failure. New applications should use `Con
 
 ## Instance Logger
 
+`NewSplit(cfg, opts...)` returns the existing Instance type with independent daily files and
+never changes globals. Instance.SetLevel affects only that instance; invalid levels return
+ErrInvalidConfig and nil or closed instances return an error wrapping os.ErrClosed. Use distinct
+directories or prefixes. Split Instance.Close automatically syncs, stops the worker and closes
+files, joining errors even when Sync fails. Standard instances retain explicit Sync before Close.
+
 ```go
 instance, err := zlogger.New(zlogger.DefaultConfig())
 if err != nil {
@@ -50,6 +56,19 @@ if err := instance.Sync(); err != nil {
 `Logger()` after Close. `Instance.Sync` then returns an error wrapping `os.ErrClosed`.
 
 ## Shutdown Order
+
+ConfigureCore and ConfigureSplit share Configure's one-success guard and publish both zlogger
+and zap globals. Their concurrent-safe, idempotent cleanup restores previous globals without
+resetting the guard. Stop all logger users first. ConfigureCore syncs before an explicitly
+registered WithCoreCleanup callback and does not automatically close external sinks. Failed
+configuration leaves ownership with the caller; nil or duplicate callbacks are invalid.
+ConfigureSplit delegates to split Instance.Close, syncing and closing once. Errors are joined;
+existing Configure cleanup remains Close-only. Dynamic levels intersect the core's own filter.
+
+ConfigureCore uses Level, AddCaller, AddStacktrace and Development; the core defines encoding
+and outputs. Other fields still undergo Resolve validation. NewSplit and ConfigureSplit use
+LogPath as directory and FileName as prefix. Outputs is validated but does not select outputs;
+Format and ColorEnabled follow existing encoder behavior.
 
 1. Stop accepting new work.
 2. Wait for in-flight work that uses the logger.

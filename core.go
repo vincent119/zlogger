@@ -65,6 +65,101 @@ func (i *Instance) Sync() error {
 	return i.logger.Sync()
 }
 
+// SetLevel 僅調整此 Instance 的最低級別，無效輸入不會改變既有級別。
+func (i *Instance) SetLevel(level string) error {
+	if i == nil {
+		return fmt.Errorf("調整 instance 級別: %w", os.ErrClosed)
+	}
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	if i.closed {
+		return fmt.Errorf("調整 instance 級別: %w", os.ErrClosed)
+	}
+	cfg := DefaultConfig()
+	cfg.Level = level
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	i.level.SetLevel(parseLevel(level))
+	return nil
+}
+
+// NewSplit 建立擁有每日三檔的非全域 Instance；nil cfg 使用預設設定。
+// Outputs 不控制輸出，但設定仍須通過 Validate。LogPath／FileName 為目錄／prefix。
+// Close 會先 Sync 再關閉自有輸出；不同 Instance 應使用不同目錄或 prefix。
+func NewSplit(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
+	if cfg == nil {
+		cfg = DefaultConfig()
+	} else {
+		cfg = cfg.normalizedCopy()
+	}
+	return newSplitInstance(cfg, opts...)
+}
+
+func newSplitInstance(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	if cfg.LogPath == "" {
+		return nil, fmt.Errorf("%w: split LogPath 不可為空", ErrInvalidConfig)
+	}
+	output, err := NewSplitOutputWithOptions(cfg.LogPath, cfg.FileName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	level := zap.NewAtomicLevelAt(parseLevel(cfg.Level))
+	core := splitCoreForOutput(newEncoder(cfg.Format, buildEncoderConfig(cfg)), output)
+	logger := configuredCoreLogger(core, cfg, level, 0)
+	return &Instance{
+		logger:  logger,
+		level:   level,
+		closers: []io.Closer{&splitInstanceResource{output: output}},
+	}, nil
+}
+
+type splitInstanceResource struct {
+	output *SplitOutput
+}
+
+func (r *splitInstanceResource) Close() error {
+	syncErr := r.output.Sync()
+	return errors.Join(syncErr, r.output.Close())
+}
+
+type levelGateCore struct {
+	zapcore.Core
+	level zap.AtomicLevel
+}
+
+func (c *levelGateCore) Enabled(level zapcore.Level) bool {
+	return c.level.Enabled(level) && c.Core.Enabled(level)
+}
+
+func (c *levelGateCore) Check(entry zapcore.Entry, checked *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if !c.Enabled(entry.Level) {
+		return checked
+	}
+	return c.Core.Check(entry, checked)
+}
+
+func (c *levelGateCore) With(fields []zapcore.Field) zapcore.Core {
+	return &levelGateCore{Core: c.Core.With(fields), level: c.level}
+}
+
+func configuredCoreLogger(core zapcore.Core, cfg *Config, level zap.AtomicLevel, callerSkip int) *zap.Logger {
+	logger := zap.New(&levelGateCore{Core: core, level: level})
+	if cfg.AddCaller {
+		logger = logger.WithOptions(zap.AddCaller(), zap.AddCallerSkip(callerSkip))
+	}
+	if cfg.AddStacktrace {
+		logger = logger.WithOptions(zap.AddStacktrace(zapcore.ErrorLevel))
+	}
+	if cfg.Development {
+		logger = logger.WithOptions(zap.Development())
+	}
+	return logger
+}
+
 // Close 關閉 Instance 擁有的資源，且可安全重複及並行呼叫。
 func (i *Instance) Close() error {
 	if i == nil {
@@ -215,7 +310,91 @@ func configureResolvedWithOptions(
 	if err != nil {
 		return nil, err
 	}
+	return publishGlobal(instance, cfg, instance.Close), nil
+}
 
+// CoreOption 設定 custom core 的明確資源清理責任。
+type CoreOption func(*coreSettings)
+
+type coreSettings struct {
+	cleanup func() error
+	err     error
+}
+
+// WithCoreCleanup 登記成功設定後執行一次的 cleanup；不得重複或提供 nil。
+// 設定失敗不執行 callback，資源仍由呼叫端負責。
+func WithCoreCleanup(cleanup func() error) CoreOption {
+	return func(settings *coreSettings) {
+		if cleanup == nil || settings.cleanup != nil {
+			settings.err = fmt.Errorf("%w: cleanup 不可為 nil 或重複", ErrInvalidConfig)
+			return
+		}
+		settings.cleanup = cleanup
+	}
+}
+
+// ConfigureCore 將 custom core 發布至 zlogger 與 zap globals。
+// core 決定編碼與輸出；設定仍先 Resolve，但僅 Level 與 logger options 影響 core。
+// cleanup 先 Sync 再執行明確登記的 callback，不自動關閉外部 sinks。
+// SetLevel 與 core 原有篩選取交集，無法啟用 core 原本拒絕的級別。
+func ConfigureCore(patch *ConfigPatch, core zapcore.Core, opts ...CoreOption) (func() error, error) {
+	cfg, err := patch.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	settings := coreSettings{}
+	for _, option := range opts {
+		if option == nil {
+			return nil, fmt.Errorf("%w: core option 不可為 nil", ErrInvalidConfig)
+		}
+		option(&settings)
+	}
+	if settings.err != nil {
+		return nil, settings.err
+	}
+	if core == nil {
+		return nil, fmt.Errorf("%w: core 不可為 nil", ErrInvalidConfig)
+	}
+	configureMu.Lock()
+	defer configureMu.Unlock()
+	if configured {
+		return nil, ErrAlreadyConfigured
+	}
+	level := zap.NewAtomicLevelAt(parseLevel(cfg.Level))
+	instance := &Instance{logger: configuredCoreLogger(core, cfg, level, 1), level: level}
+	return publishGlobal(instance, cfg, func() error {
+		syncErr := instance.Sync()
+		if settings.cleanup == nil {
+			return syncErr
+		}
+		return errors.Join(syncErr, settings.cleanup())
+	}), nil
+}
+
+// ConfigureSplit 建立每日三檔並發布至 globals；cleanup 自動 Sync、停止 worker 與關檔。
+// LogPath／FileName 為目錄／prefix，Outputs 不控制輸出但仍受 Resolve 驗證。
+func ConfigureSplit(patch *ConfigPatch, opts ...FileOutputOption) (func() error, error) {
+	cfg, err := patch.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	configureMu.Lock()
+	defer configureMu.Unlock()
+	if configured {
+		return nil, ErrAlreadyConfigured
+	}
+	instance, err := newSplitInstance(cfg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.AddCaller {
+		instance.logger = instance.logger.WithOptions(zap.AddCallerSkip(1))
+	}
+	return publishGlobal(instance, cfg, instance.Close), nil
+}
+
+// 呼叫端持有 configureMu，確保只有完成建構的 logger 能取得成功資格。
+func publishGlobal(instance *Instance, cfg *Config, closeLogger func() error) func() error {
 	previousLogger := globalLogger
 	previousConfig := globalConfig
 	previousLevel := zapGlobalLevel
@@ -230,20 +409,19 @@ func configureResolvedWithOptions(
 	var cleanupErr error
 	cleanup := func() error {
 		cleanupOnce.Do(func() {
+			cleanupErr = closeLogger()
 			configureMu.Lock()
 			globalLogger = previousLogger
 			globalConfig = previousConfig
 			zapGlobalLevel = previousLevel
 			restoreZapGlobals()
 			configureMu.Unlock()
-
-			cleanupErr = instance.Close()
 		})
 		return cleanupErr
 	}
 	globalCleanup = cleanup
 
-	return cleanup, nil
+	return cleanup
 }
 
 func buildEncoderConfig(cfg *Config) zapcore.EncoderConfig {

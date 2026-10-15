@@ -33,6 +33,13 @@ panic；新程式應使用 `Configure`。
 
 ## Instance logger
 
+每日三檔使用 `NewSplit(cfg, opts...)`，回傳既有 `Instance`，不修改 globals。
+`Instance.SetLevel("debug")` 只調整該 Instance；無效字串回傳 `ErrInvalidConfig`，
+nil 或已關閉 Instance 回傳包裝 `os.ErrClosed` 的錯誤。不同 Instance 使用不同目錄或 prefix。
+
+split Instance.Close 自動先 Sync，再停止 worker 並關檔，即使 Sync 失敗仍關閉並合併錯誤。
+一般 New／NewWithOptions 維持先由呼叫端自行 Sync，再 Close。
+
 ```go
 instance, err := zlogger.New(zlogger.DefaultConfig())
 if err != nil {
@@ -50,6 +57,20 @@ if err := instance.Sync(); err != nil {
 `Instance.Sync` 會回傳包裝 `os.ErrClosed` 的錯誤。
 
 ## 關機順序
+
+`ConfigureCore(patch, core, opts...)` 與 `ConfigureSplit(patch, opts...)` 共用 Configure
+的一次成功 guard，發布 zlogger／zap globals。cleanup 可重複及並行呼叫，恢復先前 globals，
+但不重設成功資格；應先停止所有 logger 使用者。
+
+- ConfigureCore 自動先 Sync，再執行 `WithCoreCleanup(func() error)` 登記的 callback。
+  預設不關閉外部 sinks；失敗設定不取得 callback ownership；nil 或重複 callback 不合法。
+- ConfigureSplit 委派 split Instance.Close，一次完成 Sync、停止 worker 與關檔。
+- 新入口保留合併錯誤；既有 Configure cleanup 維持 Close-only。
+- custom core level 與原 core 篩選取交集，SetLevel 無法啟用原本被拒絕的級別。
+
+ConfigureCore 只使用 Level、AddCaller、AddStacktrace、Development，編碼與輸出由 core
+決定；其餘欄位仍受 Resolve 驗證。NewSplit／ConfigureSplit 使用 LogPath 作目錄、FileName
+作 prefix，Outputs 不控制輸出但仍受驗證，Format／ColorEnabled 沿用既有 encoder 規則。
 
 1. 停止接受新工作。
 2. 等待使用 logger 的進行中工作完成。

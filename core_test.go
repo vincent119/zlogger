@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -44,6 +45,502 @@ func TestParseLevel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSplitInstancesAreIndependent(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	firstCfg := DefaultConfig()
+	firstCfg.LogPath = t.TempDir()
+	firstCfg.FileName = "first"
+	first, err := NewSplit(firstCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := first.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	secondCfg := DefaultConfig()
+	secondCfg.LogPath = t.TempDir()
+	second, err := NewSplit(secondCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := second.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if GetLogger() != nil || configured {
+		t.Fatal("Instance 不應修改 globals")
+	}
+	if err := first.SetLevel("debug"); err != nil {
+		t.Fatal(err)
+	}
+	if !first.Logger().Named("test").With(zap.String("key", "value")).Core().Enabled(zap.DebugLevel) {
+		t.Fatal("衍生 logger 應套用新 level")
+	}
+	if second.Logger().Core().Enabled(zap.DebugLevel) {
+		t.Fatal("第二個 Instance 不應被調整")
+	}
+	first.Logger().Debug("獨立訊息")
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.SetLevel("info"); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("關閉後 SetLevel = %v", err)
+	}
+	if err := first.Sync(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("關閉後 Sync = %v", err)
+	}
+	second.Logger().Warn("仍可寫入")
+	if err := second.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	files, err := filepath.Glob(filepath.Join(firstCfg.LogPath, "first-info-*.log"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("檔案 = %v，錯誤 = %v", files, err)
+	}
+	data, err := os.ReadFile(files[0])
+	if err != nil || !strings.Contains(string(data), "獨立訊息") {
+		t.Fatalf("內容 = %s，錯誤 = %v", data, err)
+	}
+}
+
+func TestInstanceSetLevel(t *testing.T) {
+	var nilInstance *Instance
+	if err := nilInstance.SetLevel("info"); !errors.Is(err, os.ErrClosed) {
+		t.Fatal(err)
+	}
+	i, err := New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = i.Close() })
+	for _, input := range []string{"", "invalid"} {
+		if err := i.SetLevel(input); !errors.Is(err, ErrInvalidConfig) {
+			t.Fatalf("%q: %v", input, err)
+		}
+		if i.level.Level() != zap.InfoLevel {
+			t.Fatal("無效輸入不應改變 level")
+		}
+	}
+}
+
+func TestConfigureCorePublishesGlobals(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	var buffer bytes.Buffer
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(&buffer), zap.DebugLevel)
+	cleanup, err := ConfigureCore(nil, core)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Info("全域訊息")
+	zap.L().Info("zap 訊息")
+	child := GetLogger().Named("child").With(zap.String("key", "value"))
+	child.Debug("不應寫入")
+	SetLevel("debug")
+	child.Debug("降級訊息")
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if GetLogger() != nil {
+		t.Fatal("應恢復先前 globals")
+	}
+	if _, err := ConfigureCore(nil, core); !errors.Is(err, ErrAlreadyConfigured) {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buffer.String(), "全域訊息") || !strings.Contains(buffer.String(), "zap 訊息") || !strings.Contains(buffer.String(), "降級訊息") || strings.Contains(buffer.String(), "不應寫入") {
+		t.Fatal(buffer.String())
+	}
+}
+
+func TestConfigureCoreCleanupOrderAndErrors(t *testing.T) {
+	resetGlobalState(t)
+	syncErr := errors.New("同步失敗")
+	closeErr := errors.New("關閉失敗")
+	sink := &recordingWriteSyncCloser{syncErr: syncErr}
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), sink, zap.DebugLevel)
+	calls := 0
+	cleanup, err := ConfigureCore(nil, core, WithCoreCleanup(func() error {
+		calls++
+		syncCalls, _ := sink.counts()
+		if syncCalls != 1 {
+			t.Errorf("同步次數 = %d", syncCalls)
+		}
+		return closeErr
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			err := cleanup()
+			if !errors.Is(err, syncErr) || !errors.Is(err, closeErr) {
+				t.Errorf("cleanup = %v", err)
+			}
+		})
+	}
+	wg.Wait()
+	if calls != 1 {
+		t.Fatalf("cleanup 次數 = %d", calls)
+	}
+	configureMu.Lock()
+	globalCleanup = nil // 已驗證錯誤，避免測試隔離 helper 重報預期錯誤。
+	configureMu.Unlock()
+	resetGlobalState(t)
+}
+
+func TestConfigureSplitRoutesLevels(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	directory := t.TempDir()
+	level, format := "debug", "json"
+	cleanup, err := ConfigureSplit(&ConfigPatch{LogPath: &directory, Level: &level, Format: &format})
+	if err != nil {
+		t.Fatal(err)
+	}
+	Debug("debug訊息")
+	Warn("warn訊息")
+	Error("error訊息")
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	for name, message := range map[string]string{"info": "debug訊息", "warn": "warn訊息", "error": "error訊息"} {
+		files, err := filepath.Glob(filepath.Join(directory, "-"+name+"-*.log"))
+		if err != nil || len(files) != 1 {
+			t.Fatalf("%s: %v %v", name, files, err)
+		}
+		data, err := os.ReadFile(files[0])
+		if err != nil || !strings.Contains(string(data), message) {
+			t.Fatalf("%s: %s %v", name, data, err)
+		}
+	}
+}
+
+func TestConfigureCoreOwnership(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	core := zapcore.NewNopCore()
+	calls := 0
+	callback := func() error { calls++; return nil }
+	badLevel := "invalid"
+	tests := []struct {
+		name  string
+		patch *ConfigPatch
+		core  zapcore.Core
+		opts  []CoreOption
+	}{
+		{name: "nil core"},
+		{name: "nil option", core: core, opts: []CoreOption{nil}},
+		{name: "nil callback", core: core, opts: []CoreOption{WithCoreCleanup(nil)}},
+		{name: "重複 callback", core: core, opts: []CoreOption{WithCoreCleanup(callback), WithCoreCleanup(callback)}},
+		{name: "無效設定", core: core, patch: &ConfigPatch{Level: &badLevel}, opts: []CoreOption{WithCoreCleanup(callback)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup, err := ConfigureCore(tt.patch, tt.core, tt.opts...)
+			if cleanup != nil || !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("cleanup=%v，錯誤=%v", cleanup != nil, err)
+			}
+			if calls != 0 || configured {
+				t.Fatal("失敗不得取得 ownership 或發布 globals")
+			}
+		})
+	}
+	cleanup, err := ConfigureCore(nil, core, WithCoreCleanup(callback))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ConfigureCore(nil, core, WithCoreCleanup(callback)); !errors.Is(err, ErrAlreadyConfigured) {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatal("重複設定不得執行 callback")
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatal("callback 應執行一次")
+	}
+}
+
+func TestNewSplitRollback(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+		opts   []FileOutputOption
+	}{
+		{name: "無效級別", mutate: func(c *Config) { c.Level = "invalid" }},
+		{name: "空目錄", mutate: func(c *Config) { c.LogPath = "" }},
+		{name: "不安全 prefix", mutate: func(c *Config) { c.FileName = "../outside" }},
+		{name: "無效權限", opts: []FileOutputOption{WithFilePerm(0)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.LogPath = t.TempDir()
+			if tt.mutate != nil {
+				tt.mutate(cfg)
+			}
+			i, err := NewSplit(cfg, tt.opts...)
+			if err == nil || i != nil {
+				t.Fatalf("instance=%v，錯誤=%v", i, err)
+			}
+		})
+	}
+}
+
+func TestSplitInstanceCloseOrderAndErrors(t *testing.T) {
+	syncErr, closeErr := errors.New("同步失敗"), errors.New("關閉失敗")
+	sink := &recordingWriteSyncCloser{syncErr: syncErr, closeErr: closeErr}
+	output := &SplitOutput{infoOut: sink}
+	i := &Instance{closers: []io.Closer{&splitInstanceResource{output: output}}}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			err := i.Close()
+			if !errors.Is(err, syncErr) || !errors.Is(err, closeErr) {
+				t.Errorf("Close = %v", err)
+			}
+		})
+	}
+	wg.Wait()
+	syncCalls, closeCalls := sink.counts()
+	if syncCalls != 1 || closeCalls != 1 {
+		t.Fatalf("Sync=%d Close=%d", syncCalls, closeCalls)
+	}
+}
+
+func TestGlobalConfigurationEntrypointsShareGuard(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	directory := t.TempDir()
+	entries := []func() (func() error, error){
+		func() (func() error, error) { return Configure(nil) },
+		func() (func() error, error) { return ConfigureCore(nil, zapcore.NewNopCore()) },
+		func() (func() error, error) { return ConfigureSplit(&ConfigPatch{LogPath: &directory}) },
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	success := 0
+	for _, entry := range entries {
+		wg.Go(func() {
+			_, err := entry()
+			mu.Lock()
+			defer mu.Unlock()
+			if err == nil {
+				success++
+			} else if !errors.Is(err, ErrAlreadyConfigured) {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if success != 1 {
+		t.Fatalf("成功次數=%d", success)
+	}
+	for _, entry := range entries {
+		if _, err := entry(); !errors.Is(err, ErrAlreadyConfigured) {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestConfigureSplitFailureCanRetry(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	directory := t.TempDir()
+	badLevel := "invalid"
+	if cleanup, err := ConfigureSplit(&ConfigPatch{Level: &badLevel}); err == nil || cleanup != nil {
+		t.Fatal("無效設定應失敗")
+	}
+	file := filepath.Join(directory, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	badPath := filepath.Join(file, "child")
+	if cleanup, err := ConfigureSplit(&ConfigPatch{LogPath: &badPath}); err == nil || cleanup != nil {
+		t.Fatal("無效路徑應失敗")
+	}
+	if configured || GetLogger() != nil {
+		t.Fatal("失敗不得發布")
+	}
+	cleanup, err := ConfigureSplit(&ConfigPatch{LogPath: &directory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConfigureSplitCleanupStopsWorker(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	cfg := DefaultConfig()
+	cfg.LogPath = t.TempDir()
+	i, err := NewSplit(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := i.closers[0].(*splitInstanceResource).output
+	configureMu.Lock()
+	cleanup := publishGlobal(i, cfg, i.Close)
+	configureMu.Unlock()
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-output.done:
+	default:
+		t.Fatal("cleanup 回傳前 worker 必須停止")
+	}
+	if err := output.openFiles(); !errors.Is(err, os.ErrClosed) {
+		t.Fatal(err)
+	}
+}
+
+func TestSplitInstanceCaller(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LogPath = t.TempDir()
+	cfg.Format = "json"
+	i, err := NewSplit(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i.Logger().Info("caller訊息")
+	if err := i.Close(); err != nil {
+		t.Fatal(err)
+	}
+	files, err := filepath.Glob(filepath.Join(cfg.LogPath, "-info-*.log"))
+	if err != nil || len(files) != 1 {
+		t.Fatal(files, err)
+	}
+	data, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "core_test.go:") {
+		t.Fatalf("caller = %s", data)
+	}
+}
+
+func TestConfigureCoreSetLevel(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	var buffer bytes.Buffer
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(&buffer), zap.WarnLevel)
+	cleanup, err := ConfigureCore(nil, core)
+	if err != nil {
+		t.Fatal(err)
+	}
+	SetLevel("debug")
+	if GetLogger().Core().Enabled(zap.InfoLevel) {
+		t.Fatal("不得啟用原 core 拒絕的級別")
+	}
+	entry := zapcore.Entry{Level: zap.DebugLevel, Message: "不應寫入"}
+	if GetLogger().Core().Check(entry, nil) != nil {
+		t.Fatal("Check 必須遵循原 core 限制")
+	}
+	SetLevel("error")
+	if GetLogger().Core().Check(zapcore.Entry{Level: zap.WarnLevel}, nil) != nil {
+		t.Fatal("Check 必須遵循動態 gate")
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstanceSetLevelConcurrentWithClose(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LogPath = t.TempDir()
+	i, err := NewSplit(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			err := i.SetLevel("DEBUG")
+			if err != nil && !errors.Is(err, os.ErrClosed) {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Go(func() {
+		if err := i.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	wg.Wait()
+}
+
+func TestConfigureSplitCreationRollback(t *testing.T) {
+	resetGlobalState(t)
+	t.Cleanup(func() { resetGlobalState(t) })
+	directory := t.TempDir()
+	date := time.Now().Format("2006-01-02")
+	blocked := filepath.Join(directory, "-error-"+date+".log")
+	if err := os.Mkdir(blocked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := ConfigureSplit(&ConfigPatch{LogPath: &directory})
+	if err == nil || cleanup != nil || configured || GetLogger() != nil {
+		t.Fatalf("部分初始化不得發布，錯誤=%v", err)
+	}
+	// Windows 若仍有開啟中的 handle，重新命名已建立的 info 檔會失敗。
+	info := filepath.Join(directory, "-info-"+date+".log")
+	if err := os.Rename(info, info+".moved"); err != nil {
+		t.Fatalf("回滾後 handle 應已關閉：%v", err)
+	}
+}
+
+func TestNewSplitDefaultsAndOptions(t *testing.T) {
+	t.Chdir(t.TempDir())
+	i, err := NewSplit(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := i.Close(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := DefaultConfig()
+	cfg.LogPath = t.TempDir()
+	cfg.AddStacktrace, cfg.Development, cfg.AddCaller = true, true, false
+	i, err = NewSplit(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i.Logger().Error("含堆疊訊息")
+	if err := i.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNewSplitUsesConfiguredPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不提供相同 POSIX mode 語意")
+	}
+	parent := t.TempDir()
+	referenceDir, referenceFile := createPermissionReference(t, parent)
+	cfg := DefaultConfig()
+	cfg.LogPath = filepath.Join(parent, "logs")
+	cfg.FileName = "app"
+	i, err := NewSplit(cfg, WithDirPerm(0o750), WithFilePerm(0o640))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := i.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertSamePermission(t, cfg.LogPath, referenceDir)
+	assertCreatedSplitFilePermissions(t, cfg.LogPath, "app", referenceFile)
 }
 
 func TestBuildEncoderConfigColorContract(t *testing.T) {

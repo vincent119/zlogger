@@ -495,19 +495,35 @@ func GetSplitCoreWithOptions(
 	encoderConfig zapcore.EncoderConfig,
 	opts ...FileOutputOption,
 ) (zapcore.Core, func(), error) {
+	core, cleanup, err := GetSplitCoreWithCleanup(directory, filePrefix, encoderConfig, opts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return core, func() { _ = cleanup() }, nil
+}
+
+// GetSplitCoreWithCleanup 建立每日三檔 core，並保留 cleanup 的關閉錯誤。
+// 呼叫端應先停止使用 logger 並執行 Sync，再呼叫可重複及並行執行的 cleanup。
+func GetSplitCoreWithCleanup(
+	directory, filePrefix string,
+	encoderConfig zapcore.EncoderConfig,
+	opts ...FileOutputOption,
+) (zapcore.Core, func() error, error) {
 	splitOut, err := NewSplitOutputWithOptions(directory, filePrefix, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	encoder := zapcore.NewJSONEncoder(encoderConfig)
+	return splitCoreForOutput(zapcore.NewJSONEncoder(encoderConfig), splitOut), splitOut.Close, nil
+}
+
+func splitCoreForOutput(encoder zapcore.Encoder, splitOut *SplitOutput) zapcore.Core {
 	infoOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.InfoLevel})
 	warnOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.WarnLevel})
 	errorOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.ErrorLevel})
-	core := buildSplitCore(encoder, SplitSinks{
+	return buildSplitCore(encoder, SplitSinks{
 		Info:  infoOut,
 		Warn:  warnOut,
 		Error: errorOut,
 	})
-	return core, func() { _ = splitOut.Close() }, nil
 }

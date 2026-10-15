@@ -10,10 +10,18 @@
 | --- | --- | --- | --- |
 | Console or one file | `Configure` / `New` | None | Cleanup / Instance |
 | Three daily files | `GetSplitCore` | Daily | Returned cleanup |
+| Daily files with close errors | `GetSplitCoreWithCleanup` | Daily | Sync first, then `func() error` |
+| Independent daily logger | `NewSplit` | Daily | Instance.Close syncs and closes |
+| Global daily logger | `ConfigureSplit` | Daily | Cleanup syncs and closes |
+| Global custom core | `ConfigureCore` | Core-defined | Explicit WithCoreCleanup |
 | Direct daily output | `NewSplitOutput` / `NewSplitOutputWithOptions` | Daily | Caller closes it |
 | Three custom sinks | `NewSplitCore` | Sink-defined | Caller manages sinks |
 
 The `file` value in `Config.Outputs` writes one file and never creates `SplitOutput` automatically.
+
+GetSplitCoreWithCleanup accepts the existing first three parameters plus optional FileOutputOption
+values and returns `(core, func() error, error)`. It preserves Close errors without automatic
+Sync or global publication. NewSplit and ConfigureSplit always create three daily files.
 
 ## Daily Level-Based Output
 

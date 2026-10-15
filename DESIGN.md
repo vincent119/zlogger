@@ -1,5 +1,17 @@
 # zlogger 設計方法說明
 
+## split Instance 與 custom core global 擴充
+
+`GetSplitCoreWithCleanup` 保留 SplitOutput.Close 錯誤；舊 GetSplitCore 透過 adapter 保持
+`func()`。`NewSplit` 使用獨立 atomic level、既有 Instance 與私有 owned resource wrapper，
+只在 split 資源關閉時自動先 Sync，再 Close，不改一般 Instance 的 Close-only 契約。
+`Instance.SetLevel` 嚴格驗證，與 Close 同步且不修改 global level。
+
+`ConfigureCore` 與 `ConfigureSplit` 共用 configureMu、configured guard 與 global 發布 helper。
+前者 Sync 後只執行 WithCoreCleanup 登記的 callback；後者重用 split builder 並委派
+Instance.Close，避免重複 Sync。新 cleanup 合併錯誤並恢復原 globals，不重設成功資格。
+level gate 在 Enabled／Check 均篩選，With 共用 atomic level；不覆蓋原 core 的篩選條件。
+
 ## 整體架構設計
 
 ### 1. 單一 Package 設計

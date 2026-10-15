@@ -23,6 +23,50 @@ type recordingWriteSyncCloser struct {
 	syncErr    error
 }
 
+func TestGetSplitCoreWithCleanupConcurrent(t *testing.T) {
+	core, cleanup, err := GetSplitCoreWithCleanup(t.TempDir(), "app", zap.NewProductionEncoderConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := core.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if err := cleanup(); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if err := core.Sync(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("關閉後 Sync = %v", err)
+	}
+}
+
+func TestGetSplitCoreWithCleanupReturnsCloseErrors(t *testing.T) {
+	core, cleanup, err := GetSplitCoreWithCleanup(t.TempDir(), "app", zap.NewProductionEncoderConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 公開建構走真實檔案；錯誤注入另驗證其委派的 SplitOutput.Close callback。
+	if err := core.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	closeErr := errors.New("檔案關閉失敗")
+	output := &SplitOutput{infoOut: &recordingWriteSyncCloser{closeErr: closeErr}}
+	errorCleanup := output.Close
+	for range 2 {
+		if err := errorCleanup(); !errors.Is(err, closeErr) {
+			t.Fatalf("cleanup = %v", err)
+		}
+	}
+}
+
 type recordingSplitSink struct {
 	mu         sync.Mutex
 	buffer     bytes.Buffer
