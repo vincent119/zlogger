@@ -3,6 +3,7 @@ package zlogger
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -355,4 +356,110 @@ func FuzzRedaction(f *testing.F) {
 			t.Fatal("nested data was not processed safely")
 		}
 	})
+}
+
+func TestStructuredFieldHelpersRedaction(t *testing.T) {
+	object := redactionObjectFunc(func(e zapcore.ObjectEncoder) error {
+		e.AddString("token", "source secret")
+		e.AddInt("count", 2)
+		return nil
+	})
+	array := redactionArrayFunc(func(e zapcore.ArrayEncoder) error { return e.AppendObject(object) })
+	for _, enabled := range []bool{false, true} {
+		name := "disabled"
+		if enabled {
+			name = "enabled"
+		}
+		t.Run(name, func(t *testing.T) {
+			var output bytes.Buffer
+			core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: enabled, Keys: []string{"token"}})
+			fields := []Field{Object("object", object), Array("array", array), Inline(object), Ints("numbers", []int{2, 1}), Bools("flags", []bool{true, false}), ByteStrings("texts", [][]byte{[]byte("text")})}
+			if err := core.Write(zapcore.Entry{}, fields); err != nil {
+				t.Fatal(err)
+			}
+			encoded := output.String()
+			if strings.Contains(encoded, "source secret") == enabled {
+				t.Fatalf("unexpected redaction: %s", encoded)
+			}
+			for _, want := range []string{"\"count\":2", "\"numbers\":[2,1]", "\"flags\":[true,false]", "\"texts\":[\"text\"]"} {
+				if !strings.Contains(encoded, want) {
+					t.Fatalf("public primitive changed: %s", encoded)
+				}
+			}
+			if enabled && strings.Count(encoded, "[REDACTED]") != 3 {
+				t.Fatalf("nested object, array, or inline secret was not masked: %s", encoded)
+			}
+		})
+	}
+	t.Run("matched containers are not evaluated", func(t *testing.T) {
+		calls := 0
+		object := redactionObjectFunc(func(zapcore.ObjectEncoder) error { calls++; return errors.New("must not evaluate object") })
+		array := redactionArrayFunc(func(zapcore.ArrayEncoder) error { calls++; return errors.New("must not evaluate array") })
+		var output bytes.Buffer
+		core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: true, Keys: []string{"token"}})
+		fields := []Field{Object("token", object), Array("TOKEN", array), Namespace("token"), Object("child", object), Array("children", array)}
+		if err := core.Write(zapcore.Entry{}, fields); err != nil {
+			t.Fatal(err)
+		}
+		if calls != 0 || strings.Contains(output.String(), "child") {
+			t.Fatalf("matched container or namespace was evaluated: calls=%d, output=%s", calls, output.String())
+		}
+	})
+	t.Run("With and WithLazy isolation", func(t *testing.T) {
+		var output bytes.Buffer
+		core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: true, Keys: []string{"token"}})
+		parent := zap.New(core)
+		child := parent.With(Namespace("request"), Object("profile", object))
+		lazy := parent.WithLazy(Namespace("token"), Object("hidden", object))
+		child.Info("child", Ints("attempts", []int{1, 2}))
+		lazy.Info("lazy")
+		lazy.Info("lazy again")
+		parent.Info("parent", String("side", "root"))
+		lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+		if len(lines) != 4 || strings.Contains(output.String(), "source secret") || !strings.Contains(lines[0], "\"request\":{\"profile\":") || strings.Contains(lines[3], "request") || strings.Contains(lines[3], "token") || !strings.Contains(lines[3], "\"side\":\"root\"") {
+			t.Fatalf("bound fields leaked into parent or lost protection: %s", output.String())
+		}
+	})
+	t.Run("fail closed", testStructuredFieldHelpersFailClosed)
+}
+
+func testStructuredFieldHelpersFailClosed(t *testing.T) {
+	t.Helper()
+	failedObject := redactionObjectFunc(func(e zapcore.ObjectEncoder) error {
+		e.AddString("partial", "source secret")
+		return errors.New("marshaler secret")
+	})
+	failedArray := redactionArrayFunc(func(e zapcore.ArrayEncoder) error {
+		e.AppendString("source secret")
+		return errors.New("marshaler secret")
+	})
+	panicObject := redactionObjectFunc(func(zapcore.ObjectEncoder) error { panic("marshaler secret") })
+	panicArray := redactionArrayFunc(func(zapcore.ArrayEncoder) error { panic("marshaler secret") })
+	var recursiveObject redactionObjectFunc
+	recursiveObject = func(e zapcore.ObjectEncoder) error { return e.AddObject("nested", recursiveObject) }
+	var recursiveArray redactionArrayFunc
+	recursiveArray = func(e zapcore.ArrayEncoder) error { return e.AppendArray(recursiveArray) }
+	oversized := redactionArrayFunc(func(e zapcore.ArrayEncoder) error {
+		for range 1025 {
+			e.AppendInt(1)
+		}
+		return nil
+	})
+	fields := []Field{Object("object", failedObject), Array("array", failedArray), Inline(failedObject), Object("panic", panicObject), Array("panic", panicArray), Object("deep", recursiveObject), Array("deep", recursiveArray), Array("budget", oversized)}
+	for index, field := range fields {
+		t.Run(fmt.Sprintf("case_%d", index), func(t *testing.T) {
+			var output, diagnostic bytes.Buffer
+			core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: true, Keys: []string{"token"}})
+			for _, target := range []zapcore.Core{core, core.With([]Field{field})} {
+				err := target.Write(zapcore.Entry{}, []Field{field})
+				if err != ErrRedactionFailed || output.Len() != 0 {
+					t.Fatalf("unsafe partial entry: error=%v, output=%s", err, output.String())
+				}
+			}
+			zap.New(core, zap.ErrorOutput(zapcore.AddSync(&diagnostic))).WithLazy(field).Info("lazy failure")
+			if output.Len() != 0 || !strings.Contains(diagnostic.String(), ErrRedactionFailed.Error()) || strings.Contains(diagnostic.String(), "source secret") || strings.Contains(diagnostic.String(), "marshaler secret") {
+				t.Fatalf("unsafe failure diagnostic: %s", diagnostic.String())
+			}
+		})
+	}
 }
