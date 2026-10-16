@@ -23,12 +23,12 @@ func redactingTestCore(t *testing.T, sink zapcore.WriteSyncer, cfg RedactionConf
 
 func TestRedactingCoreEnabled(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
-		t.Run(map[bool]string{false: "關閉", true: "開啟"}[enabled], func(t *testing.T) {
+		t.Run(map[bool]string{false: "disabled", true: "enabled"}[enabled], func(t *testing.T) {
 			var output bytes.Buffer
 			cfg := RedactionConfig{Enabled: enabled, Keys: []string{"token"}}
 			core := redactingTestCore(t, zapcore.AddSync(&output), cfg)
 			cfg.Keys[0] = "other"
-			zap.New(core).Info("測試", zap.String("token", "測試秘密"), Redacted("manual"))
+			zap.New(core).Info("test", zap.String("token", "測試秘密"), Redacted("manual"))
 			if strings.Contains(output.String(), "測試秘密") == enabled {
 				t.Fatal(output.String())
 			}
@@ -57,7 +57,7 @@ func TestRedactingCoreConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := NewRedactingCore(encoder, zapcore.AddSync(&bytes.Buffer{}), zap.DebugLevel, RedactionConfig{Keys: []string{""}}); err != nil {
-		t.Fatal("停用應忽略 Keys", err)
+		t.Fatal("disabled redaction must ignore Keys", err)
 	}
 }
 
@@ -75,15 +75,17 @@ func TestRedactingCoreKeys(t *testing.T) {
 
 type forbiddenRedactionValue struct{}
 
-func (forbiddenRedactionValue) Error() string                { panic("不應求值 error") }
-func (forbiddenRedactionValue) String() string               { panic("不應求值 Stringer") }
-func (forbiddenRedactionValue) MarshalJSON() ([]byte, error) { panic("不應反射編碼") }
+func (forbiddenRedactionValue) Error() string  { panic("must not evaluate error") }
+func (forbiddenRedactionValue) String() string { panic("must not evaluate Stringer") }
+func (forbiddenRedactionValue) MarshalJSON() ([]byte, error) {
+	panic("must not encode through reflection")
+}
 
 func TestRedactingCoreOpaque(t *testing.T) {
 	var output bytes.Buffer
 	core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: true, Keys: []string{"token"}})
 	logger := zap.New(core).With(zap.Error(forbiddenRedactionValue{}), zap.Stringer("detail", forbiddenRedactionValue{}))
-	logger.Info("測試", zap.Reflect("object", forbiddenRedactionValue{}))
+	logger.Info("test", zap.Reflect("object", forbiddenRedactionValue{}))
 	if bytes.Count(output.Bytes(), []byte("[REDACTED]")) != 3 {
 		t.Fatal(output.String())
 	}
@@ -106,8 +108,8 @@ func TestRedactingCoreNested(t *testing.T) {
 		return nil
 	})
 	array := redactionArrayFunc(func(e zapcore.ArrayEncoder) error { return e.AppendObject(object) })
-	zap.New(core).With(zap.Namespace("space")).Info("測試", zap.Object("child", object), zap.Array("list", array), zap.Inline(object))
-	zap.New(core).With(zap.Namespace("private")).Info("測試", zap.String("anything", "測試秘密"))
+	zap.New(core).With(zap.Namespace("space")).Info("test", zap.Object("child", object), zap.Array("list", array), zap.Inline(object))
+	zap.New(core).With(zap.Namespace("private")).Info("test", zap.String("anything", "測試秘密"))
 	if strings.Contains(output.String(), "測試秘密") || !strings.Contains(output.String(), "公開") {
 		t.Fatal(output.String())
 	}
@@ -119,7 +121,7 @@ func TestRedactingCoreNested(t *testing.T) {
 func TestRedactingCoreFailsClosed(t *testing.T) {
 	failed := redactionObjectFunc(func(e zapcore.ObjectEncoder) error {
 		e.AddString("ok", "測試秘密")
-		return errors.New("測試秘密")
+		return errors.New("marshaler secret")
 	})
 	var recurse redactionObjectFunc
 	recurse = func(e zapcore.ObjectEncoder) error { return e.AddObject("nested", recurse) }
@@ -129,7 +131,7 @@ func TestRedactingCoreFailsClosed(t *testing.T) {
 		}
 		return nil
 	})
-	failedArray := redactionArrayFunc(func(zapcore.ArrayEncoder) error { return errors.New("測試秘密") })
+	failedArray := redactionArrayFunc(func(zapcore.ArrayEncoder) error { return errors.New("marshaler secret") })
 	var recursiveArray redactionArrayFunc
 	recursiveArray = func(e zapcore.ArrayEncoder) error { return e.AppendArray(recursiveArray) }
 	panicObject := redactionObjectFunc(func(zapcore.ObjectEncoder) error { panic("測試秘密") })
@@ -137,8 +139,8 @@ func TestRedactingCoreFailsClosed(t *testing.T) {
 		var output bytes.Buffer
 		core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: true, Keys: []string{"token"}})
 		err := core.Write(zapcore.Entry{}, []zap.Field{field})
-		if !errors.Is(err, ErrRedactionFailed) || output.Len() != 0 || strings.Contains(err.Error(), "測試秘密") {
-			t.Fatalf("錯誤=%v，輸出=%s", err, output.String())
+		if !errors.Is(err, ErrRedactionFailed) || output.Len() != 0 || strings.Contains(err.Error(), "測試秘密") || strings.Contains(err.Error(), "marshaler secret") {
+			t.Fatalf("error=%v, output=%s", err, output.String())
 		}
 		child := core.With([]zap.Field{field})
 		if err := child.Write(zapcore.Entry{}, nil); !errors.Is(err, ErrRedactionFailed) {
@@ -150,12 +152,12 @@ func TestRedactingCoreFailsClosed(t *testing.T) {
 func TestRedactingCoreMaskedContainersAndIsolation(t *testing.T) {
 	var output bytes.Buffer
 	core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: true, Keys: []string{"token"}})
-	object := redactionObjectFunc(func(zapcore.ObjectEncoder) error { panic("不得求值") })
-	array := redactionArrayFunc(func(zapcore.ArrayEncoder) error { panic("不得求值") })
+	object := redactionObjectFunc(func(zapcore.ObjectEncoder) error { panic("must not evaluate") })
+	array := redactionArrayFunc(func(zapcore.ArrayEncoder) error { panic("must not evaluate") })
 	logger := zap.New(core)
-	logger.Info("容器", zap.Object("token", object), zap.Array("TOKEN", array))
-	logger.With(zap.Namespace("token")).Info("子 logger", zap.String("other", "測試秘密"))
-	logger.Info("父 logger", zap.String("other", "公開"))
+	logger.Info("containers", zap.Object("token", object), zap.Array("TOKEN", array))
+	logger.With(zap.Namespace("token")).Info("child logger", zap.String("other", "測試秘密"))
+	logger.Info("parent logger", zap.String("other", "公開"))
 	if strings.Contains(output.String(), "測試秘密") || !strings.Contains(output.String(), `"other":"公開"`) || strings.Count(output.String(), "[REDACTED]") != 3 {
 		t.Fatal(output.String())
 	}
@@ -171,11 +173,11 @@ func TestRedactingCoreEntrypoints(t *testing.T) {
 				t.Fatal(err)
 			}
 			logger := zap.New(core).Named("child").With(zap.String("token", "測試秘密"))
-			logger.WithLazy(zap.String("token", "測試秘密")).Info("測試")
-			logger.Sugar().Infow("測試", "token", "測試秘密")
-			checked := logger.Check(zap.InfoLevel, "測試")
+			logger.WithLazy(zap.String("token", "測試秘密")).Info("test")
+			logger.Sugar().Infow("test", "token", "測試秘密")
+			checked := logger.Check(zap.InfoLevel, "test")
 			if checked == nil {
-				t.Fatal("應接受記錄")
+				t.Fatal("entry must be accepted")
 			}
 			checked.Write(zap.String("token", "測試秘密"))
 			if strings.Contains(output.String(), "測試秘密") {
@@ -200,7 +202,7 @@ func TestRedactingCoreContracts(t *testing.T) {
 	for range 8 {
 		wg.Go(func() {
 			for range 20 {
-				logger.With(zap.String("token", "測試秘密")).Info("測試")
+				logger.With(zap.String("token", "測試秘密")).Info("test")
 			}
 		})
 	}
@@ -221,7 +223,7 @@ func TestRedactingCoreContracts(t *testing.T) {
 
 func TestRedactingCoreLevelAndSinkErrors(t *testing.T) {
 	observer := newTestObserver(t, 4)
-	sentinel := errors.New("測試 I/O 失敗")
+	sentinel := errors.New("test I/O failed")
 	sink, err := NewObservedWriteSyncer(failingObserverSink{writeErr: sentinel, syncErr: sentinel}, observer)
 	if err != nil {
 		t.Fatal(err)
@@ -232,18 +234,18 @@ func TestRedactingCoreLevelAndSinkErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	if core.Check(zapcore.Entry{Level: zap.InfoLevel}, nil) != nil {
-		t.Fatal("低於門檻的日誌不可通過")
+		t.Fatal("entries below the threshold must be rejected")
 	}
 	level.SetLevel(zap.DebugLevel)
 	if core.Check(zapcore.Entry{Level: zap.InfoLevel}, nil) == nil {
-		t.Fatal("動態調整門檻後應通過")
+		t.Fatal("entry must pass after the threshold changes")
 	}
 	if err := core.Write(zapcore.Entry{}, []zap.Field{{Type: zapcore.UnknownType}}); !errors.Is(err, ErrRedactionFailed) {
 		t.Fatal(err)
 	}
 	select {
 	case event := <-observer.Events():
-		t.Fatal("遮罩失敗不可產生 sink 事件", event.Operation)
+		t.Fatal("redaction failure must not emit a sink event", event.Operation)
 	default:
 	}
 	if err := core.Write(zapcore.Entry{}, []zap.Field{zap.String("token", "測試秘密")}); err != sentinel {
@@ -259,7 +261,7 @@ func TestRedactingCoreLevelAndSinkErrors(t *testing.T) {
 				t.Fatal(event.Operation)
 			}
 		default:
-			t.Fatal("缺少 sink 故障事件")
+			t.Fatal("missing sink failure event")
 		}
 	}
 }
@@ -304,10 +306,10 @@ func TestRedactingCoreFailureDiagnostic(t *testing.T) {
 	core := redactingTestCore(t, zapcore.AddSync(&output), RedactionConfig{Enabled: true, Keys: []string{"token"}})
 	failed := redactionObjectFunc(func(e zapcore.ObjectEncoder) error {
 		e.AddString("ok", "測試秘密")
-		return errors.New("測試秘密")
+		return errors.New("marshaler secret")
 	})
-	zap.New(core, zap.ErrorOutput(zapcore.AddSync(&diagnostic))).With(zap.Object("data", failed)).Info("測試")
-	if output.Len() != 0 || strings.Contains(diagnostic.String(), "測試秘密") || !strings.Contains(diagnostic.String(), ErrRedactionFailed.Error()) {
+	zap.New(core, zap.ErrorOutput(zapcore.AddSync(&diagnostic))).With(zap.Object("data", failed)).Info("test")
+	if output.Len() != 0 || strings.Contains(diagnostic.String(), "測試秘密") || strings.Contains(diagnostic.String(), "marshaler secret") || !strings.Contains(diagnostic.String(), ErrRedactionFailed.Error()) {
 		t.Fatal(output.String(), diagnostic.String())
 	}
 }
@@ -328,10 +330,10 @@ func FuzzRedaction(f *testing.F) {
 			t.Fatal(err)
 		}
 		decoded := decodeTestJSON(t, output.String())
-		// 無效 UTF-8 key 由 JSON 正規化，不能拿原 key 當解碼索引。
+		// JSON normalizes invalid UTF-8 keys, so the original key cannot index the decoded object.
 		for _, got := range decoded {
 			if got != "[REDACTED]" {
-				t.Fatalf("未遮罩：%v", got)
+				t.Fatalf("value was not redacted: %v", got)
 			}
 		}
 		output.Reset()
@@ -350,7 +352,7 @@ func FuzzRedaction(f *testing.F) {
 			t.Fatal(err)
 		}
 		if strings.Contains(output.String(), "結構測試秘密") || (err != nil && output.Len() != 0) {
-			t.Fatal("巢狀資料未安全處理")
+			t.Fatal("nested data was not processed safely")
 		}
 	})
 }

@@ -116,7 +116,7 @@ func TestFromContextReturnsDefensiveCopy(t *testing.T) {
 
 	assertFieldsEqual(t, second, []Field{String("key", "original")})
 	if &first[0] == &second[0] {
-		t.Fatal("FromContext 不得回傳共享底層陣列的 slice")
+		t.Fatal("FromContext must not return a slice sharing the backing array")
 	}
 }
 
@@ -161,11 +161,11 @@ func assertFieldsEqual(t *testing.T, got, want []Field) {
 	t.Helper()
 
 	if len(got) != len(want) {
-		t.Fatalf("欄位數量不符：got %d，want %d", len(got), len(want))
+		t.Fatalf("field count: got %d, want %d", len(got), len(want))
 	}
 	for i := range want {
 		if got[i].Key != want[i].Key || got[i].Type != want[i].Type || got[i].String != want[i].String {
-			t.Errorf("欄位 %d 不符：got %#v，want %#v", i, got[i], want[i])
+			t.Errorf("field %d: got %#v, want %#v", i, got[i], want[i])
 		}
 	}
 }

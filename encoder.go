@@ -5,17 +5,17 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// NewNoEscapeJSONEncoder 回傳 zap JSON encoder；zap 本身不進行 HTML browser escaping。
+// NewNoEscapeJSONEncoder returns zap's JSON encoder, which does not perform browser HTML escaping.
 //
-// Deprecated: 請直接使用 zapcore.NewJSONEncoder。
+// Deprecated: Use zapcore.NewJSONEncoder directly.
 func NewNoEscapeJSONEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
 	return zapcore.NewJSONEncoder(cfg)
 }
 
-// DisableHTMLEscaping 為 v1 source compatibility 保留，原樣回傳 logger。
-// 此函式無法修改已建立 logger 的 encoder。
+// DisableHTMLEscaping returns the logger unchanged for v1 source compatibility.
+// It cannot replace the encoder of an existing logger.
 //
-// Deprecated: 請在建立 core 時直接選擇符合需求的 encoder。
+// Deprecated: Select an appropriate encoder when constructing the core.
 func DisableHTMLEscaping(log *zap.Logger) *zap.Logger {
 	return log
 }

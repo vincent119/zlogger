@@ -86,7 +86,7 @@ func TestRedactingCorePrimitiveTypes(t *testing.T) {
 		}
 		return e.AppendObject(object)
 	})
-	zap.New(core).Info("測試", zap.Object("object", object), zap.Array("array", array))
+	zap.New(core).Info("test", zap.Object("object", object), zap.Array("array", array))
 	if !bytes.Contains(output.Bytes(), []byte("safeBool")) || !bytes.Contains(output.Bytes(), []byte("[REDACTED]")) {
 		t.Fatal(output.String())
 	}

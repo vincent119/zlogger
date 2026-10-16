@@ -24,7 +24,7 @@ go get github.com/vincent119/zlogger
 
 ## 先寫一筆日誌
 
-以下範例使用預設的終端機輸出。初始化成功後會看到「服務啟動」與 `component=api` 欄位。
+以下範例使用預設的終端機輸出。初始化成功後會看到 `service started` 與 `component=api` 欄位。
 
 ```go
 package main
@@ -50,13 +50,13 @@ func run() error {
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
-			fmt.Fprintln(os.Stderr, "關閉 logger 失敗：", err)
+			fmt.Fprintln(os.Stderr, "close logger:", err)
 		}
 	}()
 
-	zlogger.Info("服務啟動", zlogger.String("component", "api"))
+	zlogger.Info("service started", zlogger.String("component", "api"))
 	if err := zlogger.Sync(); err != nil {
-		fmt.Fprintln(os.Stderr, "同步 logger 失敗：", err)
+		fmt.Fprintln(os.Stderr, "sync logger:", err)
 	}
 	return nil
 }

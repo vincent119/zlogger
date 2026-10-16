@@ -42,7 +42,7 @@ func main() {
 		_ = sink.Close()
 	}()
 
-	logger.Info("伺服器啟動")
+	logger.Info("server started")
 }
 ```
 
@@ -86,7 +86,7 @@ func main() {
 		_ = errorSink.Close()
 	}()
 
-	logger.Info("伺服器啟動")
+	logger.Info("server started")
 }
 ```
 
@@ -108,7 +108,7 @@ if err != nil {
 	return errors.Join(err, closeSinks())
 }
 defer func() { _ = cleanup() }()
-zlogger.Info("服務啟動")
+zlogger.Info("service started")
 ```
 
 設定成功才把 callback 清理責任交出去。cleanup 會先同步 core，再關閉三個 sink。

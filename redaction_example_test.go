@@ -19,9 +19,9 @@ func ExampleNewRedactingCore() {
 	if err != nil {
 		panic(err)
 	}
-	// 必須在建構遮罩 core 後才綁定欄位；零值設定不會啟用遮罩。
-	zap.New(core).With(zlogger.String("token", "示範用值")).Info("驗證請求", zlogger.String("request_id", "r1"))
+	// Bind fields only after constructing the redacting core. The zero-value configuration leaves redaction disabled.
+	zap.New(core).With(zlogger.String("token", "example value")).Info("authentication request", zlogger.String("request_id", "r1"))
 	fmt.Print(output.String())
 	// Output:
-	// {"msg":"驗證請求","token":"[REDACTED]","request_id":"r1"}
+	// {"msg":"authentication request","token":"[REDACTED]","request_id":"r1"}
 }

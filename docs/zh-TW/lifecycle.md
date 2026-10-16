@@ -53,7 +53,7 @@ defer func() { _ = instance.Close() }()
 if err := instance.SetLevel("debug"); err != nil {
 	return err
 }
-instance.Logger().Info("背景工作啟動")
+instance.Logger().Info("worker started")
 ```
 
 每個每日 Instance 要用不同的目錄或檔名前綴。
@@ -99,7 +99,7 @@ for {
 	case <-ctx.Done():
 		return
 	case event := <-observer.Events():
-		// 用操作種類更新健康狀態，原始 Err 不直接外送。
+		// Use operation metadata for health checks. Keep raw errors out of external alerts.
 		_ = event.Operation
 	}
 }

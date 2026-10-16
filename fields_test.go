@@ -234,9 +234,9 @@ func TestRedactedField(t *testing.T) {
 	)
 	logger := zap.New(core)
 
-	logger.Info("敏感欄位測試", Redacted("authorization"))
+	logger.Info("sensitive field test", Redacted("authorization"))
 	encoded := output.String()
 	if !strings.Contains(encoded, `"authorization":"[REDACTED]"`) {
-		t.Fatalf("輸出未包含遮罩欄位：%s", encoded)
+		t.Fatalf("output does not contain the redacted field: %s", encoded)
 	}
 }

@@ -74,38 +74,38 @@ func TestSplitInstancesAreIndependent(t *testing.T) {
 		}
 	})
 	if GetLogger() != nil || configured {
-		t.Fatal("Instance 不應修改 globals")
+		t.Fatal("Instance must not modify globals")
 	}
 	if err := first.SetLevel("debug"); err != nil {
 		t.Fatal(err)
 	}
 	if !first.Logger().Named("test").With(zap.String("key", "value")).Core().Enabled(zap.DebugLevel) {
-		t.Fatal("衍生 logger 應套用新 level")
+		t.Fatal("derived logger must use the updated level")
 	}
 	if second.Logger().Core().Enabled(zap.DebugLevel) {
-		t.Fatal("第二個 Instance 不應被調整")
+		t.Fatal("the second Instance must remain unchanged")
 	}
-	first.Logger().Debug("獨立訊息")
+	first.Logger().Debug("independent message")
 	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if err := first.SetLevel("info"); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("關閉後 SetLevel = %v", err)
+		t.Fatalf("SetLevel after close = %v", err)
 	}
 	if err := first.Sync(); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("關閉後 Sync = %v", err)
+		t.Fatalf("Sync after close = %v", err)
 	}
-	second.Logger().Warn("仍可寫入")
+	second.Logger().Warn("still writable")
 	if err := second.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	files, err := filepath.Glob(filepath.Join(firstCfg.LogPath, "first-info-*.log"))
 	if err != nil || len(files) != 1 {
-		t.Fatalf("檔案 = %v，錯誤 = %v", files, err)
+		t.Fatalf("files = %v, error = %v", files, err)
 	}
 	data, err := os.ReadFile(files[0])
-	if err != nil || !strings.Contains(string(data), "獨立訊息") {
-		t.Fatalf("內容 = %s，錯誤 = %v", data, err)
+	if err != nil || !strings.Contains(string(data), "independent message") {
+		t.Fatalf("content = %s, error = %v", data, err)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestInstanceSetLevel(t *testing.T) {
 			t.Fatalf("%q: %v", input, err)
 		}
 		if i.level.Level() != zap.InfoLevel {
-			t.Fatal("無效輸入不應改變 level")
+			t.Fatal("invalid input must not change the level")
 		}
 	}
 }
@@ -138,30 +138,30 @@ func TestConfigureCorePublishesGlobals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	Info("全域訊息")
-	zap.L().Info("zap 訊息")
+	Info("global message")
+	zap.L().Info("zap message")
 	child := GetLogger().Named("child").With(zap.String("key", "value"))
-	child.Debug("不應寫入")
+	child.Debug("must not be written")
 	SetLevel("debug")
-	child.Debug("降級訊息")
+	child.Debug("lowered-level message")
 	if err := cleanup(); err != nil {
 		t.Fatal(err)
 	}
 	if GetLogger() != nil {
-		t.Fatal("應恢復先前 globals")
+		t.Fatal("previous globals must be restored")
 	}
 	if _, err := ConfigureCore(nil, core); !errors.Is(err, ErrAlreadyConfigured) {
 		t.Fatal(err)
 	}
-	if !strings.Contains(buffer.String(), "全域訊息") || !strings.Contains(buffer.String(), "zap 訊息") || !strings.Contains(buffer.String(), "降級訊息") || strings.Contains(buffer.String(), "不應寫入") {
+	if !strings.Contains(buffer.String(), "global message") || !strings.Contains(buffer.String(), "zap message") || !strings.Contains(buffer.String(), "lowered-level message") || strings.Contains(buffer.String(), "must not be written") {
 		t.Fatal(buffer.String())
 	}
 }
 
 func TestConfigureCoreCleanupOrderAndErrors(t *testing.T) {
 	resetGlobalState(t)
-	syncErr := errors.New("同步失敗")
-	closeErr := errors.New("關閉失敗")
+	syncErr := errors.New("sync failed")
+	closeErr := errors.New("close failed")
 	sink := &recordingWriteSyncCloser{syncErr: syncErr}
 	core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), sink, zap.DebugLevel)
 	calls := 0
@@ -169,7 +169,7 @@ func TestConfigureCoreCleanupOrderAndErrors(t *testing.T) {
 		calls++
 		syncCalls, _ := sink.counts()
 		if syncCalls != 1 {
-			t.Errorf("同步次數 = %d", syncCalls)
+			t.Errorf("sync calls = %d", syncCalls)
 		}
 		return closeErr
 	}))
@@ -187,10 +187,10 @@ func TestConfigureCoreCleanupOrderAndErrors(t *testing.T) {
 	}
 	wg.Wait()
 	if calls != 1 {
-		t.Fatalf("cleanup 次數 = %d", calls)
+		t.Fatalf("cleanup calls = %d", calls)
 	}
 	configureMu.Lock()
-	globalCleanup = nil // 已驗證錯誤，避免測試隔離 helper 重報預期錯誤。
+	globalCleanup = nil // The error was already checked. Avoid reporting the expected error again during isolation cleanup.
 	configureMu.Unlock()
 	resetGlobalState(t)
 }
@@ -204,13 +204,13 @@ func TestConfigureSplitRoutesLevels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	Debug("debug訊息")
-	Warn("warn訊息")
-	Error("error訊息")
+	Debug("debug message")
+	Warn("warn message")
+	Error("error message")
 	if err := cleanup(); err != nil {
 		t.Fatal(err)
 	}
-	for name, message := range map[string]string{"info": "debug訊息", "warn": "warn訊息", "error": "error訊息"} {
+	for name, message := range map[string]string{"info": "debug message", "warn": "warn message", "error": "error message"} {
 		files, err := filepath.Glob(filepath.Join(directory, "-"+name+"-*.log"))
 		if err != nil || len(files) != 1 {
 			t.Fatalf("%s: %v %v", name, files, err)
@@ -238,17 +238,17 @@ func TestConfigureCoreOwnership(t *testing.T) {
 		{name: "nil core"},
 		{name: "nil option", core: core, opts: []CoreOption{nil}},
 		{name: "nil callback", core: core, opts: []CoreOption{WithCoreCleanup(nil)}},
-		{name: "重複 callback", core: core, opts: []CoreOption{WithCoreCleanup(callback), WithCoreCleanup(callback)}},
-		{name: "無效設定", core: core, patch: &ConfigPatch{Level: &badLevel}, opts: []CoreOption{WithCoreCleanup(callback)}},
+		{name: "duplicate callback", core: core, opts: []CoreOption{WithCoreCleanup(callback), WithCoreCleanup(callback)}},
+		{name: "invalid configuration", core: core, patch: &ConfigPatch{Level: &badLevel}, opts: []CoreOption{WithCoreCleanup(callback)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cleanup, err := ConfigureCore(tt.patch, tt.core, tt.opts...)
 			if cleanup != nil || !errors.Is(err, ErrInvalidConfig) {
-				t.Fatalf("cleanup=%v，錯誤=%v", cleanup != nil, err)
+				t.Fatalf("cleanup=%v, error=%v", cleanup != nil, err)
 			}
 			if calls != 0 || configured {
-				t.Fatal("失敗不得取得 ownership 或發布 globals")
+				t.Fatal("failure must not transfer ownership or publish globals")
 			}
 		})
 	}
@@ -260,13 +260,13 @@ func TestConfigureCoreOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	if calls != 0 {
-		t.Fatal("重複設定不得執行 callback")
+		t.Fatal("duplicate configuration must not invoke the callback")
 	}
 	if err := cleanup(); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
-		t.Fatal("callback 應執行一次")
+		t.Fatal("callback must run once")
 	}
 }
 
@@ -276,10 +276,10 @@ func TestNewSplitRollback(t *testing.T) {
 		mutate func(*Config)
 		opts   []FileOutputOption
 	}{
-		{name: "無效級別", mutate: func(c *Config) { c.Level = "invalid" }},
-		{name: "空目錄", mutate: func(c *Config) { c.LogPath = "" }},
-		{name: "不安全 prefix", mutate: func(c *Config) { c.FileName = "../outside" }},
-		{name: "無效權限", opts: []FileOutputOption{WithFilePerm(0)}},
+		{name: "invalid level", mutate: func(c *Config) { c.Level = "invalid" }},
+		{name: "empty directory", mutate: func(c *Config) { c.LogPath = "" }},
+		{name: "unsafe prefix", mutate: func(c *Config) { c.FileName = "../outside" }},
+		{name: "invalid permissions", opts: []FileOutputOption{WithFilePerm(0)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -290,14 +290,14 @@ func TestNewSplitRollback(t *testing.T) {
 			}
 			i, err := NewSplit(cfg, tt.opts...)
 			if err == nil || i != nil {
-				t.Fatalf("instance=%v，錯誤=%v", i, err)
+				t.Fatalf("instance=%v, error=%v", i, err)
 			}
 		})
 	}
 }
 
 func TestSplitInstanceCloseOrderAndErrors(t *testing.T) {
-	syncErr, closeErr := errors.New("同步失敗"), errors.New("關閉失敗")
+	syncErr, closeErr := errors.New("sync failed"), errors.New("close failed")
 	sink := &recordingWriteSyncCloser{syncErr: syncErr, closeErr: closeErr}
 	output := &SplitOutput{infoOut: sink}
 	i := &Instance{closers: []io.Closer{&splitInstanceResource{output: output}}}
@@ -343,7 +343,7 @@ func TestGlobalConfigurationEntrypointsShareGuard(t *testing.T) {
 	}
 	wg.Wait()
 	if success != 1 {
-		t.Fatalf("成功次數=%d", success)
+		t.Fatalf("successful calls=%d", success)
 	}
 	for _, entry := range entries {
 		if _, err := entry(); !errors.Is(err, ErrAlreadyConfigured) {
@@ -358,7 +358,7 @@ func TestConfigureSplitFailureCanRetry(t *testing.T) {
 	directory := t.TempDir()
 	badLevel := "invalid"
 	if cleanup, err := ConfigureSplit(&ConfigPatch{Level: &badLevel}); err == nil || cleanup != nil {
-		t.Fatal("無效設定應失敗")
+		t.Fatal("invalid configuration must fail")
 	}
 	file := filepath.Join(directory, "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
@@ -366,10 +366,10 @@ func TestConfigureSplitFailureCanRetry(t *testing.T) {
 	}
 	badPath := filepath.Join(file, "child")
 	if cleanup, err := ConfigureSplit(&ConfigPatch{LogPath: &badPath}); err == nil || cleanup != nil {
-		t.Fatal("無效路徑應失敗")
+		t.Fatal("invalid path must fail")
 	}
 	if configured || GetLogger() != nil {
-		t.Fatal("失敗不得發布")
+		t.Fatal("failure must not publish globals")
 	}
 	cleanup, err := ConfigureSplit(&ConfigPatch{LogPath: &directory})
 	if err != nil {
@@ -399,7 +399,7 @@ func TestConfigureSplitCleanupStopsWorker(t *testing.T) {
 	select {
 	case <-output.done:
 	default:
-		t.Fatal("cleanup 回傳前 worker 必須停止")
+		t.Fatal("worker must stop before cleanup returns")
 	}
 	if err := output.openFiles(); !errors.Is(err, os.ErrClosed) {
 		t.Fatal(err)
@@ -414,7 +414,7 @@ func TestSplitInstanceCaller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	i.Logger().Info("caller訊息")
+	i.Logger().Info("caller message")
 	if err := i.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -442,15 +442,15 @@ func TestConfigureCoreSetLevel(t *testing.T) {
 	}
 	SetLevel("debug")
 	if GetLogger().Core().Enabled(zap.InfoLevel) {
-		t.Fatal("不得啟用原 core 拒絕的級別")
+		t.Fatal("must not enable levels rejected by the original core")
 	}
-	entry := zapcore.Entry{Level: zap.DebugLevel, Message: "不應寫入"}
+	entry := zapcore.Entry{Level: zap.DebugLevel, Message: "must not be written"}
 	if GetLogger().Core().Check(entry, nil) != nil {
-		t.Fatal("Check 必須遵循原 core 限制")
+		t.Fatal("Check must respect the original core filter")
 	}
 	SetLevel("error")
 	if GetLogger().Core().Check(zapcore.Entry{Level: zap.WarnLevel}, nil) != nil {
-		t.Fatal("Check 必須遵循動態 gate")
+		t.Fatal("Check must respect the dynamic gate")
 	}
 	if err := cleanup(); err != nil {
 		t.Fatal(err)
@@ -492,12 +492,12 @@ func TestConfigureSplitCreationRollback(t *testing.T) {
 	}
 	cleanup, err := ConfigureSplit(&ConfigPatch{LogPath: &directory})
 	if err == nil || cleanup != nil || configured || GetLogger() != nil {
-		t.Fatalf("部分初始化不得發布，錯誤=%v", err)
+		t.Fatalf("partial initialization must not publish globals, error=%v", err)
 	}
-	// Windows 若仍有開啟中的 handle，重新命名已建立的 info 檔會失敗。
+	// On Windows, renaming the created info file fails if its handle remains open.
 	info := filepath.Join(directory, "-info-"+date+".log")
 	if err := os.Rename(info, info+".moved"); err != nil {
-		t.Fatalf("回滾後 handle 應已關閉：%v", err)
+		t.Fatalf("handle must be closed after rollback: %v", err)
 	}
 }
 
@@ -517,7 +517,7 @@ func TestNewSplitDefaultsAndOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	i.Logger().Error("含堆疊訊息")
+	i.Logger().Error("message with stack trace")
 	if err := i.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +525,7 @@ func TestNewSplitDefaultsAndOptions(t *testing.T) {
 
 func TestNewSplitUsesConfiguredPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 不提供相同 POSIX mode 語意")
+		t.Skip("Windows does not provide equivalent POSIX mode semantics")
 	}
 	parent := t.TempDir()
 	referenceDir, referenceFile := createPermissionReference(t, parent)
@@ -550,19 +550,19 @@ func TestBuildEncoderConfigColorContract(t *testing.T) {
 		enabled   bool
 		wantColor bool
 	}{
-		{name: "console 啟用顏色", format: "console", enabled: true, wantColor: true},
-		{name: "console 停用顏色", format: "console", enabled: false, wantColor: false},
-		{name: "JSON 啟用顏色", format: "json", enabled: true, wantColor: false},
-		{name: "JSON 停用顏色", format: "json", enabled: false, wantColor: false},
+		{name: "console with color", format: "console", enabled: true, wantColor: true},
+		{name: "console without color", format: "console", enabled: false, wantColor: false},
+		{name: "JSON with color", format: "json", enabled: true, wantColor: false},
+		{name: "JSON without color", format: "json", enabled: false, wantColor: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{Format: tt.format, ColorEnabled: tt.enabled}
-			entry := zapcore.Entry{Level: zap.InfoLevel, Message: "測試訊息"}
+			entry := zapcore.Entry{Level: zap.InfoLevel, Message: "test message"}
 			encoded, err := newEncoder(tt.format, buildEncoderConfig(cfg)).EncodeEntry(entry, nil)
 			if err != nil {
-				t.Fatalf("編碼日誌失敗：%v", err)
+				t.Fatalf("encode log entry: %v", err)
 			}
 			t.Cleanup(encoded.Free)
 
@@ -572,20 +572,20 @@ func TestBuildEncoderConfigColorContract(t *testing.T) {
 					Level string `json:"level"`
 				}
 				if err := json.Unmarshal(encoded.Bytes(), &output); err != nil {
-					t.Fatalf("解析 JSON 日誌失敗：%v", err)
+					t.Fatalf("decode JSON log entry: %v", err)
 				}
 				level = output.Level
 			}
 
 			if gotColor := strings.Contains(level, "\x1b["); gotColor != tt.wantColor {
-				t.Errorf("format=%s color_enabled=%t 的 level=%q，顏色狀態=%t，預期=%t",
+				t.Errorf("format=%s color_enabled=%t level=%q, colored=%t, want=%t",
 					tt.format, tt.enabled, level, gotColor, tt.wantColor)
 			}
 		})
 	}
 }
 
-// resetGlobalState 隔離會修改全域 logger 的測試，並回報資源清理錯誤。
+// resetGlobalState isolates tests that modify globals and reports resource cleanup errors.
 func resetGlobalState(t testing.TB) {
 	t.Helper()
 
@@ -594,7 +594,7 @@ func resetGlobalState(t testing.TB) {
 	configureMu.Unlock()
 	if cleanup != nil {
 		if err := cleanup(); err != nil {
-			t.Errorf("清理全域 logger 失敗：%v", err)
+			t.Errorf("clean up global logger: %v", err)
 		}
 	}
 
@@ -618,11 +618,11 @@ func registerGlobalCleanup(t *testing.T) {
 func registerFileCleanup(t *testing.T, file *os.File) {
 	t.Helper()
 	if file == nil {
-		t.Fatal("測試日誌檔案不可為 nil")
+		t.Fatal("test log file must not be nil")
 	}
 	t.Cleanup(func() {
 		if err := file.Close(); err != nil {
-			t.Errorf("關閉測試日誌檔案失敗：%v", err)
+			t.Errorf("close test log file: %v", err)
 		}
 	})
 }
@@ -1136,7 +1136,7 @@ func TestNewReturnsFileOpenError(t *testing.T) {
 	tmpDir := t.TempDir()
 	notDirectory := filepath.Join(tmpDir, "not-directory")
 	if err := os.WriteFile(notDirectory, []byte("content"), 0o600); err != nil {
-		t.Fatalf("建立測試檔案失敗：%v", err)
+		t.Fatalf("create test file: %v", err)
 	}
 
 	cfg := &Config{
@@ -1148,15 +1148,15 @@ func TestNewReturnsFileOpenError(t *testing.T) {
 
 	instance, err := New(cfg)
 	if err == nil {
-		t.Fatal("預期建立 file logger 失敗")
+		t.Fatal("file logger construction must fail")
 	}
 	if instance != nil {
-		t.Fatal("建構失敗時不應回傳部分 Instance")
+		t.Fatal("failed construction must not return a partial Instance")
 	}
 }
 
 func TestNewReturnsInvalidConfigBeforeIO(t *testing.T) {
-	logPath := filepath.Join(t.TempDir(), "不應建立")
+	logPath := filepath.Join(t.TempDir(), "must-not-exist")
 	cfg := &Config{
 		Level:   "trace",
 		Format:  "json",
@@ -1166,13 +1166,13 @@ func TestNewReturnsInvalidConfigBeforeIO(t *testing.T) {
 
 	instance, err := New(cfg)
 	if !errors.Is(err, ErrInvalidConfig) {
-		t.Fatalf("錯誤 = %v，預期 ErrInvalidConfig", err)
+		t.Fatalf("error = %v, want ErrInvalidConfig", err)
 	}
 	if instance != nil {
-		t.Fatal("設定無效時不應回傳部分 Instance")
+		t.Fatal("invalid configuration must not return a partial Instance")
 	}
 	if _, statErr := os.Stat(logPath); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("驗證失敗前不應建立目錄，Stat 錯誤 = %v", statErr)
+		t.Fatalf("validation failure must not create directories, Stat error = %v", statErr)
 	}
 }
 
@@ -1187,33 +1187,33 @@ func TestNewDoesNotMutateConfig(t *testing.T) {
 
 	instance, err := New(cfg)
 	if err != nil {
-		t.Fatalf("建立 Instance 失敗：%v", err)
+		t.Fatalf("create Instance: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := instance.Close(); err != nil {
-			t.Errorf("關閉 Instance 失敗：%v", err)
+			t.Errorf("close Instance: %v", err)
 		}
 	})
 
 	if cfg.Level != "DEBUG" || cfg.Format != "JSON" || cfg.Outputs[0] != "FILE" {
-		t.Fatalf("New 不應修改輸入 Config：%+v", cfg)
+		t.Fatalf("New must not modify the input Config: %+v", cfg)
 	}
 }
 
 func TestNewWithOptionsUsesConfiguredPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 不提供相同 POSIX mode 語意")
+		t.Skip("Windows does not provide equivalent POSIX mode semantics")
 	}
 
 	parent := t.TempDir()
 	referenceDir := filepath.Join(parent, "reference")
 	if err := os.Mkdir(referenceDir, 0o750); err != nil {
-		t.Fatalf("建立參考目錄失敗：%v", err)
+		t.Fatalf("create reference directory: %v", err)
 	}
 	referenceFile := filepath.Join(referenceDir, "reference.log")
-	//nolint:gosec // 測試刻意建立 0640 參考檔，驗證自訂 group-read 權限。
+	//nolint:gosec // Deliberately create a 0640 reference file to verify custom group-read permissions.
 	if err := os.WriteFile(referenceFile, nil, 0o640); err != nil {
-		t.Fatalf("建立參考檔案失敗：%v", err)
+		t.Fatalf("create reference file: %v", err)
 	}
 
 	base := filepath.Join(parent, "logs")
@@ -1223,11 +1223,11 @@ func TestNewWithOptionsUsesConfiguredPermissions(t *testing.T) {
 		WithFilePerm(0o640),
 	)
 	if err != nil {
-		t.Fatalf("以自訂 permissions 建立 Instance 失敗：%v", err)
+		t.Fatalf("create Instance with custom permissions: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := instance.Close(); err != nil {
-			t.Errorf("關閉 Instance 失敗：%v", err)
+			t.Errorf("close Instance: %v", err)
 		}
 	})
 
@@ -1237,7 +1237,7 @@ func TestNewWithOptionsUsesConfiguredPermissions(t *testing.T) {
 
 func TestConfigureWithOptionsUsesConfiguredPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 不提供相同 POSIX mode 語意")
+		t.Skip("Windows does not provide equivalent POSIX mode semantics")
 	}
 	resetGlobalState(t)
 	t.Cleanup(func() { resetGlobalState(t) })
@@ -1245,12 +1245,12 @@ func TestConfigureWithOptionsUsesConfiguredPermissions(t *testing.T) {
 	parent := t.TempDir()
 	referenceDir := filepath.Join(parent, "reference")
 	if err := os.Mkdir(referenceDir, 0o750); err != nil {
-		t.Fatalf("建立參考目錄失敗：%v", err)
+		t.Fatalf("create reference directory: %v", err)
 	}
 	referenceFile := filepath.Join(referenceDir, "reference.log")
-	//nolint:gosec // 測試刻意建立 0640 參考檔，驗證自訂 group-read 權限。
+	//nolint:gosec // Deliberately create a 0640 reference file to verify custom group-read permissions.
 	if err := os.WriteFile(referenceFile, nil, 0o640); err != nil {
-		t.Fatalf("建立參考檔案失敗：%v", err)
+		t.Fatalf("create reference file: %v", err)
 	}
 
 	base := filepath.Join(parent, "logs")
@@ -1262,11 +1262,11 @@ func TestConfigureWithOptionsUsesConfiguredPermissions(t *testing.T) {
 		FileName: &fileName,
 	}, WithDirPerm(0o750), WithFilePerm(0o640))
 	if err != nil {
-		t.Fatalf("以自訂 permissions 設定全域 logger 失敗：%v", err)
+		t.Fatalf("configure global logger with custom permissions: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := cleanup(); err != nil {
-			t.Errorf("清理全域 logger 失敗：%v", err)
+			t.Errorf("clean up global logger: %v", err)
 		}
 	})
 
@@ -1275,20 +1275,20 @@ func TestConfigureWithOptionsUsesConfiguredPermissions(t *testing.T) {
 }
 
 func TestNewRollsBackResourcesInReverseOrder(t *testing.T) {
-	firstErr := errors.New("第一個關閉錯誤")
-	secondErr := errors.New("第二個關閉錯誤")
+	firstErr := errors.New("first close error")
+	secondErr := errors.New("second close error")
 	order := make([]string, 0, 2)
 	closers := []io.Closer{
 		&recordingCloser{name: "first", order: &order, err: firstErr},
 		&recordingCloser{name: "second", order: &order, err: secondErr},
 	}
 
-	err := closeOwnedResources(closers, "回收 logger 資源")
+	err := closeOwnedResources(closers, "roll back logger resources")
 	if !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
-		t.Fatalf("回滾錯誤未保留完整錯誤鏈：%v", err)
+		t.Fatalf("rollback lost part of the error chain: %v", err)
 	}
 	if len(order) != 2 || order[0] != "second" || order[1] != "first" {
-		t.Fatalf("資源關閉順序 = %v，預期為 [second first]", order)
+		t.Fatalf("resource close order = %v, want [second first]", order)
 	}
 }
 
@@ -1303,11 +1303,11 @@ func TestNewCleanupIsConcurrentAndIdempotent(t *testing.T) {
 
 	instance, err := New(cfg)
 	if err != nil {
-		t.Fatalf("建立 Instance 失敗：%v", err)
+		t.Fatalf("create Instance: %v", err)
 	}
-	instance.Logger().Info("cleanup 測試")
+	instance.Logger().Info("cleanup test")
 	if err := instance.Sync(); err != nil {
-		t.Fatalf("同步 Instance 失敗：%v", err)
+		t.Fatalf("sync Instance: %v", err)
 	}
 
 	const callers = 8
@@ -1325,11 +1325,11 @@ func TestNewCleanupIsConcurrentAndIdempotent(t *testing.T) {
 
 	for closeErr := range errs {
 		if closeErr != nil {
-			t.Errorf("Close 回傳非預期錯誤：%v", closeErr)
+			t.Errorf("Close returned an unexpected error: %v", closeErr)
 		}
 	}
 	if err := instance.Sync(); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("關閉後 Sync 錯誤 = %v，預期包裝 os.ErrClosed", err)
+		t.Fatalf("Sync error after close = %v, want wrapped os.ErrClosed", err)
 	}
 }
 
@@ -1340,31 +1340,31 @@ func TestConfigureCanRetryAfterFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	notDirectory := filepath.Join(tmpDir, "not-directory")
 	if err := os.WriteFile(notDirectory, []byte("content"), 0o600); err != nil {
-		t.Fatalf("建立測試檔案失敗：%v", err)
+		t.Fatalf("create test file: %v", err)
 	}
 	outputs := []string{"file"}
 	badPath := filepath.Join(notDirectory, "logs")
 
 	cleanup, err := Configure(&ConfigPatch{Outputs: &outputs, LogPath: &badPath})
 	if err == nil {
-		t.Fatal("第一次 Configure 預期失敗")
+		t.Fatal("first Configure must fail")
 	}
 	if cleanup != nil {
-		t.Fatal("Configure 失敗時不應回傳 cleanup")
+		t.Fatal("failed Configure must not return cleanup")
 	}
 	if GetLogger() != nil {
-		t.Fatal("Configure 失敗時不應發布半初始化 logger")
+		t.Fatal("failed Configure must not publish a partially initialized logger")
 	}
 
 	cleanup, err = Configure(nil)
 	if err != nil {
-		t.Fatalf("修正設定後 Configure 應可重試：%v", err)
+		t.Fatalf("Configure must allow retry after correcting settings: %v", err)
 	}
 	if GetLogger() == nil {
-		t.Fatal("Configure 成功後應發布全域 logger")
+		t.Fatal("successful Configure must publish a global logger")
 	}
 	if err := cleanup(); err != nil {
-		t.Fatalf("清理全域 logger 失敗：%v", err)
+		t.Fatalf("clean up global logger: %v", err)
 	}
 }
 
@@ -1374,22 +1374,22 @@ func TestConfigureRejectsSecondSuccess(t *testing.T) {
 
 	cleanup, err := Configure(nil)
 	if err != nil {
-		t.Fatalf("第一次 Configure 失敗：%v", err)
+		t.Fatalf("first Configure failed: %v", err)
 	}
 	first := GetLogger()
 
 	secondCleanup, err := Configure(nil)
 	if !errors.Is(err, ErrAlreadyConfigured) {
-		t.Fatalf("第二次 Configure 錯誤 = %v，預期 ErrAlreadyConfigured", err)
+		t.Fatalf("second Configure error = %v, want ErrAlreadyConfigured", err)
 	}
 	if secondCleanup != nil {
-		t.Fatal("第二次 Configure 不應回傳 cleanup")
+		t.Fatal("second Configure must not return cleanup")
 	}
 	if GetLogger() != first {
-		t.Fatal("第二次 Configure 不應替換已發布 logger")
+		t.Fatal("second Configure must not replace the published logger")
 	}
 	if err := cleanup(); err != nil {
-		t.Fatalf("清理全域 logger 失敗：%v", err)
+		t.Fatalf("clean up global logger: %v", err)
 	}
 }
 
@@ -1424,14 +1424,14 @@ func TestConfigureConcurrent(t *testing.T) {
 			continue
 		}
 		if !errors.Is(result.err, ErrAlreadyConfigured) {
-			t.Errorf("競爭 Configure 回傳非預期錯誤：%v", result.err)
+			t.Errorf("concurrent Configure returned an unexpected error: %v", result.err)
 		}
 	}
 	if success != 1 {
-		t.Fatalf("成功次數 = %d，預期為 1", success)
+		t.Fatalf("successful calls = %d, want 1", success)
 	}
 	if err := cleanup(); err != nil {
-		t.Fatalf("清理全域 logger 失敗：%v", err)
+		t.Fatalf("clean up global logger: %v", err)
 	}
 }
 
@@ -1441,7 +1441,7 @@ func TestLegacyInitCompatibility(t *testing.T) {
 
 	Init(nil)
 	if GetLogger() == nil {
-		t.Fatal("Init(nil) 應維持既有初始化行為")
+		t.Fatal("Init(nil) must retain legacy initialization behavior")
 	}
 
 	Init(nil)

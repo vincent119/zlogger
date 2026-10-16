@@ -52,7 +52,7 @@ func WriteDailyLog() (err error) {
 		err = errors.Join(err, logger.Sync(), cleanup())
 	}()
 
-	logger.Info("服務啟動")
+	logger.Info("service started")
 	return nil
 }
 ```
@@ -88,7 +88,7 @@ if err != nil {
 	return err
 }
 defer func() { _ = instance.Close() }()
-instance.Logger().Info("每日輸出已啟動")
+instance.Logger().Info("daily output started")
 ```
 
 觀察外部 sink 時，先建立 `NewObservedWriteSyncer(sink, observer)` 再交給 core。

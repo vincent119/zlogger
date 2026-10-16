@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// ErrUnsafeLogPath 表示日誌 leaf name 可能逸出基準目錄或指向 symlink。
-var ErrUnsafeLogPath = errors.New("日誌檔案路徑不安全")
+// ErrUnsafeLogPath indicates that a log leaf name may escape its base directory or reference a symlink.
+var ErrUnsafeLogPath = errors.New("unsafe log file path")
 
 const (
 	defaultLogDirMode  os.FileMode = 0o700
@@ -21,22 +21,22 @@ func validateLogLeaf(name string, allowEmpty bool) error {
 		if allowEmpty {
 			return nil
 		}
-		return fmt.Errorf("%w: leaf name 不可為空", ErrUnsafeLogPath)
+		return fmt.Errorf("%w: leaf name must not be empty", ErrUnsafeLogPath)
 	}
 	if name == "." || name == ".." {
-		return fmt.Errorf("%w: leaf name %q 不可表示目錄", ErrUnsafeLogPath, name)
+		return fmt.Errorf("%w: leaf name %q must not identify a directory", ErrUnsafeLogPath, name)
 	}
 	if strings.IndexByte(name, 0) >= 0 {
-		return fmt.Errorf("%w: leaf name 不可包含 NUL", ErrUnsafeLogPath)
+		return fmt.Errorf("%w: leaf name must not contain NUL", ErrUnsafeLogPath)
 	}
 	if strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("%w: leaf name %q 不可包含路徑分隔符", ErrUnsafeLogPath, name)
+		return fmt.Errorf("%w: leaf name %q must not contain path separators", ErrUnsafeLogPath, name)
 	}
 	if filepath.IsAbs(name) || hasWindowsDrivePrefix(name) {
-		return fmt.Errorf("%w: leaf name %q 不可為絕對或磁碟路徑", ErrUnsafeLogPath, name)
+		return fmt.Errorf("%w: leaf name %q must not be an absolute or volume path", ErrUnsafeLogPath, name)
 	}
 	if filepath.Base(name) != name {
-		return fmt.Errorf("%w: leaf name %q 不可包含路徑語意", ErrUnsafeLogPath, name)
+		return fmt.Errorf("%w: leaf name %q must not contain path semantics", ErrUnsafeLogPath, name)
 	}
 	return nil
 }
@@ -102,12 +102,12 @@ func openRootedLogFilesWithPermissionsAndOpener(
 		return []*os.File{}, nil
 	}
 	if openRoot == nil {
-		return nil, fmt.Errorf("開啟日誌 root %q: %w", baseDir, os.ErrInvalid)
+		return nil, fmt.Errorf("open log root %q: %w", baseDir, os.ErrInvalid)
 	}
 
 	root, err := openRoot(baseDir)
 	if err != nil {
-		return nil, fmt.Errorf("開啟日誌 root %q: %w", baseDir, err)
+		return nil, fmt.Errorf("open log root %q: %w", baseDir, err)
 	}
 
 	files := make([]*os.File, 0, len(leaves))
@@ -115,9 +115,9 @@ func openRootedLogFilesWithPermissionsAndOpener(
 		info, lstatErr := root.Lstat(leaf)
 		switch {
 		case lstatErr == nil && info.Mode()&os.ModeSymlink != 0:
-			err = fmt.Errorf("%w: 日誌 root %q 的 leaf %q 是 symlink", ErrUnsafeLogPath, baseDir, leaf)
+			err = fmt.Errorf("%w: log root %q leaf %q is a symlink", ErrUnsafeLogPath, baseDir, leaf)
 		case lstatErr != nil && !errors.Is(lstatErr, os.ErrNotExist):
-			err = fmt.Errorf("檢查日誌 root %q 的 leaf %q: %w", baseDir, leaf, lstatErr)
+			err = fmt.Errorf("inspect log root %q leaf %q: %w", baseDir, leaf, lstatErr)
 		}
 		if err != nil {
 			return nil, cleanupRootedLogFiles(root, baseDir, files, err)
@@ -129,7 +129,7 @@ func openRootedLogFilesWithPermissionsAndOpener(
 			filePerm,
 		)
 		if openErr != nil {
-			err = fmt.Errorf("開啟日誌 root %q 的 leaf %q: %w", baseDir, leaf, openErr)
+			err = fmt.Errorf("open log root %q leaf %q: %w", baseDir, leaf, openErr)
 			return nil, cleanupRootedLogFiles(root, baseDir, files, err)
 		}
 		files = append(files, file)
@@ -137,7 +137,7 @@ func openRootedLogFilesWithPermissionsAndOpener(
 
 	if err := root.Close(); err != nil {
 		return nil, errors.Join(
-			fmt.Errorf("關閉日誌 root %q: %w", baseDir, err),
+			fmt.Errorf("close log root %q: %w", baseDir, err),
 			closeRootedLogFiles(files),
 		)
 	}
@@ -152,7 +152,7 @@ func cleanupRootedLogFiles(
 ) error {
 	rootCloseErr := root.Close()
 	if rootCloseErr != nil {
-		rootCloseErr = fmt.Errorf("關閉日誌 root %q: %w", baseDir, rootCloseErr)
+		rootCloseErr = fmt.Errorf("close log root %q: %w", baseDir, rootCloseErr)
 	}
 	return errors.Join(cause, closeRootedLogFiles(files), rootCloseErr)
 }
@@ -161,7 +161,7 @@ func closeRootedLogFiles(files []*os.File) error {
 	closeErrs := make([]error, 0, len(files))
 	for index := len(files) - 1; index >= 0; index-- {
 		if err := files[index].Close(); err != nil {
-			closeErrs = append(closeErrs, fmt.Errorf("關閉 partial 日誌檔案: %w", err))
+			closeErrs = append(closeErrs, fmt.Errorf("close partially opened log files: %w", err))
 		}
 	}
 	return errors.Join(closeErrs...)

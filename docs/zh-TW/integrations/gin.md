@@ -92,10 +92,10 @@ func Logger(conf Zconfig) gin.HandlerFunc {
 		}
 
 		if len(c.Errors) > 0 {
-			zlogger.ErrorContext(ctx, "HTTP 請求處理失敗", fields...)
+			zlogger.ErrorContext(ctx, "HTTP request failed", fields...)
 			return
 		}
-		zlogger.InfoContext(ctx, "HTTP 請求", fields...)
+		zlogger.InfoContext(ctx, "HTTP request", fields...)
 	}
 }
 ```
@@ -106,7 +106,7 @@ func Logger(conf Zconfig) gin.HandlerFunc {
 middleware.SetLogFields(c, zlogger.String("user_id", "12345"))
 middleware.SetLogCategory(c, "callback")
 
-zlogger.InfoContext(c.Request.Context(), "處理 callback")
+zlogger.InfoContext(c.Request.Context(), "process callback")
 middleware.SkipMiddlewareLog(c)
 ```
 

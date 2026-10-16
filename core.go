@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	// ErrAlreadyConfigured 表示全域 logger 已完成一次成功設定。
-	ErrAlreadyConfigured = errors.New("全域 logger 已完成設定")
+	// ErrAlreadyConfigured indicates that global configuration has already succeeded.
+	ErrAlreadyConfigured = errors.New("global logger is already configured")
 
 	globalLogger   *zap.Logger
 	zapGlobalLevel = zap.NewAtomicLevel()
@@ -27,10 +27,10 @@ var (
 	globalCleanup func() error
 )
 
-// Field 是 zap.Field 的別名。
+// Field is an alias for zap.Field.
 type Field = zap.Field
 
-// Instance 持有非全域 logger 與其擁有的資源。
+// Instance owns a non-global logger and its resources.
 type Instance struct {
 	logger  *zap.Logger
 	level   zap.AtomicLevel
@@ -42,8 +42,8 @@ type Instance struct {
 	closeErr  error
 }
 
-// Logger 回傳底層 zap logger。
-// 呼叫端不得在 Close 後繼續使用回傳值。
+// Logger returns the underlying zap logger.
+// The returned logger must not be used after Close.
 func (i *Instance) Logger() *zap.Logger {
 	if i == nil {
 		return nil
@@ -51,7 +51,7 @@ func (i *Instance) Logger() *zap.Logger {
 	return i.logger
 }
 
-// Sync 將目前 Instance 的緩衝資料同步至輸出。
+// Sync flushes the Instance's buffered data to its outputs.
 func (i *Instance) Sync() error {
 	if i == nil {
 		return nil
@@ -60,20 +60,20 @@ func (i *Instance) Sync() error {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	if i.closed {
-		return fmt.Errorf("同步 logger instance: %w", os.ErrClosed)
+		return fmt.Errorf("sync logger instance: %w", os.ErrClosed)
 	}
 	return i.logger.Sync()
 }
 
-// SetLevel 僅調整此 Instance 的最低級別，無效輸入不會改變既有級別。
+// SetLevel changes only this Instance's minimum level. Invalid input leaves it unchanged.
 func (i *Instance) SetLevel(level string) error {
 	if i == nil {
-		return fmt.Errorf("調整 instance 級別: %w", os.ErrClosed)
+		return fmt.Errorf("set instance level: %w", os.ErrClosed)
 	}
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	if i.closed {
-		return fmt.Errorf("調整 instance 級別: %w", os.ErrClosed)
+		return fmt.Errorf("set instance level: %w", os.ErrClosed)
 	}
 	cfg := DefaultConfig()
 	cfg.Level = level
@@ -84,9 +84,9 @@ func (i *Instance) SetLevel(level string) error {
 	return nil
 }
 
-// NewSplit 建立擁有每日三檔的非全域 Instance；nil cfg 使用預設設定。
-// Outputs 不控制輸出，但設定仍須通過 Validate。LogPath／FileName 為目錄／prefix。
-// Close 會先 Sync 再關閉自有輸出；不同 Instance 應使用不同目錄或 prefix。
+// NewSplit creates a non-global Instance owning three daily files. A nil cfg uses defaults.
+// Outputs does not select sinks but must pass Validate. LogPath/FileName specify directory/prefix.
+// Close syncs before closing owned outputs. Use a distinct directory or prefix for each Instance.
 func NewSplit(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 	if cfg == nil {
 		cfg = DefaultConfig()
@@ -101,7 +101,7 @@ func newSplitInstance(cfg *Config, opts ...FileOutputOption) (*Instance, error) 
 		return nil, err
 	}
 	if cfg.LogPath == "" {
-		return nil, fmt.Errorf("%w: split LogPath 不可為空", ErrInvalidConfig)
+		return nil, fmt.Errorf("%w: split LogPath must not be empty", ErrInvalidConfig)
 	}
 	output, err := NewSplitOutputWithOptions(cfg.LogPath, cfg.FileName, opts...)
 	if err != nil {
@@ -160,7 +160,7 @@ func configuredCoreLogger(core zapcore.Core, cfg *Config, level zap.AtomicLevel,
 	return logger
 }
 
-// Close 關閉 Instance 擁有的資源，且可安全重複及並行呼叫。
+// Close releases owned resources and supports repeated and concurrent calls.
 func (i *Instance) Close() error {
 	if i == nil {
 		return nil
@@ -172,22 +172,22 @@ func (i *Instance) Close() error {
 		closers := slices.Clone(i.closers)
 		i.mu.Unlock()
 
-		i.closeErr = closeOwnedResources(closers, "關閉 logger 資源")
+		i.closeErr = closeOwnedResources(closers, "close logger resources")
 	})
 
 	return i.closeErr
 }
 
-// New 建立不修改全域狀態的 logger Instance。
-// nil Config 會使用 DefaultConfig。
+// New creates a logger Instance without modifying global state.
+// A nil Config uses DefaultConfig.
 func New(cfg *Config) (*Instance, error) {
 	return NewWithOptions(cfg)
 }
 
-// NewWithOptions 建立可設定新建目錄與檔案權限的 logger Instance。
+// NewWithOptions creates an Instance with configurable permissions for new directories and files.
 //
-// 未提供 options 時與 New 相同。Options 只影響新建立的檔案系統物件，
-// 實際權限仍受 process umask 限縮，且不會改寫既有權限。
+// With no options it behaves like New. Options affect only newly created filesystem objects.
+// The process umask can further restrict permissions. Existing permissions are not changed.
 func NewWithOptions(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 	if cfg == nil {
 		cfg = DefaultConfig()
@@ -202,7 +202,7 @@ func NewWithOptions(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 		return nil, err
 	}
 	if settings.observer != nil {
-		return nil, fmt.Errorf("%w: WithOutputObserver 僅支援 split 輸出", ErrInvalidConfig)
+		return nil, fmt.Errorf("%w: WithOutputObserver requires split output", ErrInvalidConfig)
 	}
 
 	level := zap.NewAtomicLevelAt(parseLevel(cfg.Level))
@@ -211,7 +211,7 @@ func NewWithOptions(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 	closers := make([]io.Closer, 0, 1)
 
 	rollback := func(buildErr error) error {
-		return errors.Join(buildErr, closeOwnedResources(closers, "回收 logger 資源"))
+		return errors.Join(buildErr, closeOwnedResources(closers, "roll back logger resources"))
 	}
 
 	for _, output := range cfg.Outputs {
@@ -259,14 +259,14 @@ func NewWithOptions(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 	return instance, nil
 }
 
-// Configure 建立並發布全域 logger，失敗時不修改既有全域狀態。
+// Configure publishes a global logger. Failure leaves existing global state unchanged.
 func Configure(patch *ConfigPatch) (func() error, error) {
 	return ConfigureWithOptions(patch)
 }
 
-// ConfigureWithOptions 建立可設定檔案建立權限的全域 logger。
+// ConfigureWithOptions configures a global logger with file creation permissions.
 //
-// 未提供 options 時與 Configure 相同；成功時仍由回傳的 cleanup 管理資源。
+// With no options it behaves like Configure. The returned cleanup owns successful resources.
 func ConfigureWithOptions(
 	patch *ConfigPatch,
 	opts ...FileOutputOption,
@@ -278,9 +278,9 @@ func ConfigureWithOptions(
 	return configureResolvedWithOptions(cfg, opts...)
 }
 
-// Init 保留既有初始化入口。
+// Init retains the legacy initialization entry point.
 //
-// Deprecated: 新程式應使用 Configure 取得可處理的錯誤與 cleanup。
+// Deprecated: Use Configure to receive errors and a cleanup function.
 func Init(cfg *Config) {
 	merged := DefaultConfig().Merge(cfg).normalizedCopy()
 	_, err := configureResolved(merged)
@@ -290,7 +290,7 @@ func Init(cfg *Config) {
 	panic(err)
 }
 
-// initLogger 保留既有 package-private 測試入口。
+// initLogger retains the package-private test entry point.
 func initLogger(cfg *Config) {
 	Init(cfg)
 }
@@ -316,7 +316,7 @@ func configureResolvedWithOptions(
 	return publishGlobal(instance, cfg, instance.Close), nil
 }
 
-// CoreOption 設定 custom core 的明確資源清理責任。
+// CoreOption specifies explicit cleanup ownership for a custom core.
 type CoreOption func(*coreSettings)
 
 type coreSettings struct {
@@ -324,22 +324,22 @@ type coreSettings struct {
 	err     error
 }
 
-// WithCoreCleanup 登記成功設定後執行一次的 cleanup；不得重複或提供 nil。
-// 設定失敗不執行 callback，資源仍由呼叫端負責。
+// WithCoreCleanup registers a callback to run once after successful configuration. Nil and duplicates are rejected.
+// Failed configuration does not invoke the callback. The caller retains resource ownership.
 func WithCoreCleanup(cleanup func() error) CoreOption {
 	return func(settings *coreSettings) {
 		if cleanup == nil || settings.cleanup != nil {
-			settings.err = fmt.Errorf("%w: cleanup 不可為 nil 或重複", ErrInvalidConfig)
+			settings.err = fmt.Errorf("%w: cleanup must not be nil or registered more than once", ErrInvalidConfig)
 			return
 		}
 		settings.cleanup = cleanup
 	}
 }
 
-// ConfigureCore 將 custom core 發布至 zlogger 與 zap globals。
-// core 決定編碼與輸出；設定仍先 Resolve，但僅 Level 與 logger options 影響 core。
-// cleanup 先 Sync 再執行明確登記的 callback，不自動關閉外部 sinks。
-// SetLevel 與 core 原有篩選取交集，無法啟用 core 原本拒絕的級別。
+// ConfigureCore publishes a custom core to both zlogger and zap globals.
+// The core controls encoding and outputs. Settings are resolved, but only Level and logger options affect the core.
+// Cleanup syncs before invoking the registered callback. It does not close external sinks automatically.
+// SetLevel intersects with the core's filter and cannot enable levels the core rejects.
 func ConfigureCore(patch *ConfigPatch, core zapcore.Core, opts ...CoreOption) (func() error, error) {
 	cfg, err := patch.Resolve()
 	if err != nil {
@@ -348,7 +348,7 @@ func ConfigureCore(patch *ConfigPatch, core zapcore.Core, opts ...CoreOption) (f
 	settings := coreSettings{}
 	for _, option := range opts {
 		if option == nil {
-			return nil, fmt.Errorf("%w: core option 不可為 nil", ErrInvalidConfig)
+			return nil, fmt.Errorf("%w: core option must not be nil", ErrInvalidConfig)
 		}
 		option(&settings)
 	}
@@ -356,7 +356,7 @@ func ConfigureCore(patch *ConfigPatch, core zapcore.Core, opts ...CoreOption) (f
 		return nil, settings.err
 	}
 	if core == nil {
-		return nil, fmt.Errorf("%w: core 不可為 nil", ErrInvalidConfig)
+		return nil, fmt.Errorf("%w: core must not be nil", ErrInvalidConfig)
 	}
 	configureMu.Lock()
 	defer configureMu.Unlock()
@@ -374,8 +374,8 @@ func ConfigureCore(patch *ConfigPatch, core zapcore.Core, opts ...CoreOption) (f
 	}), nil
 }
 
-// ConfigureSplit 建立每日三檔並發布至 globals；cleanup 自動 Sync、停止 worker 與關檔。
-// LogPath／FileName 為目錄／prefix，Outputs 不控制輸出但仍受 Resolve 驗證。
+// ConfigureSplit publishes three daily files globally. Cleanup syncs, stops the worker, and closes files.
+// LogPath/FileName specify directory/prefix. Outputs does not select sinks but must pass Resolve.
 func ConfigureSplit(patch *ConfigPatch, opts ...FileOutputOption) (func() error, error) {
 	cfg, err := patch.Resolve()
 	if err != nil {
@@ -396,7 +396,7 @@ func ConfigureSplit(patch *ConfigPatch, opts ...FileOutputOption) (func() error,
 	return publishGlobal(instance, cfg, instance.Close), nil
 }
 
-// 呼叫端持有 configureMu，確保只有完成建構的 logger 能取得成功資格。
+// The caller holds configureMu so that only a fully constructed logger can claim successful configuration.
 func publishGlobal(instance *Instance, cfg *Config, closeLogger func() error) func() error {
 	previousLogger := globalLogger
 	previousConfig := globalConfig
@@ -476,7 +476,7 @@ func newFileCoreWithSettings(
 	settings fileOutputSettings,
 ) (zapcore.Core, *os.File, error) {
 	if err := os.MkdirAll(cfg.LogPath, settings.dirPerm); err != nil {
-		return nil, nil, fmt.Errorf("建立日誌目錄 %q: %w", cfg.LogPath, err)
+		return nil, nil, fmt.Errorf("create log directory %q: %w", cfg.LogPath, err)
 	}
 
 	logFileName := cfg.FileName
@@ -489,7 +489,7 @@ func newFileCoreWithSettings(
 	}
 	if len(logFiles) != 1 {
 		return nil, nil, errors.Join(
-			fmt.Errorf("取得日誌檔案數量 %d，預期 1: %w", len(logFiles), os.ErrInvalid),
+			fmt.Errorf("got %d log files, expected 1: %w", len(logFiles), os.ErrInvalid),
 			closeRootedLogFiles(logFiles),
 		)
 	}
@@ -520,7 +520,7 @@ func closeOwnedResources(closers []io.Closer, operation string) error {
 	return errors.Join(closeErrs...)
 }
 
-// buildConsoleCore 保留既有 package-private 測試入口。
+// buildConsoleCore retains the package-private test entry point.
 func buildConsoleCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 	cfg := globalConfig
 	if cfg == nil {
@@ -529,7 +529,7 @@ func buildConsoleCore(encoderConfig zapcore.EncoderConfig) zapcore.Core {
 	return newConsoleCore(cfg, encoderConfig, zapGlobalLevel)
 }
 
-// buildFileCore 保留既有 package-private 測試入口，並回傳由呼叫端關閉的檔案。
+// buildFileCore retains the package-private test entry point and returns a file for the caller to close.
 func buildFileCore(encoderConfig zapcore.EncoderConfig) (zapcore.Core, *os.File) {
 	cfg := globalConfig
 	if cfg == nil {
@@ -546,7 +546,7 @@ func buildFileCore(encoderConfig zapcore.EncoderConfig) (zapcore.Core, *os.File)
 	return core, file
 }
 
-// parseLevel 解析既有 level 字串；未知值維持回退 info 的 legacy 行為。
+// parseLevel retains the legacy info fallback for unknown level strings.
 func parseLevel(level string) zapcore.Level {
 	switch strings.ToLower(level) {
 	case "debug":
@@ -564,53 +564,53 @@ func parseLevel(level string) zapcore.Level {
 	}
 }
 
-// Debug 記錄 debug 訊息。
+// Debug logs a debug message.
 func Debug(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Debug(msg, fields...)
 	}
 }
 
-// Info 記錄 info 訊息。
+// Info logs an info message.
 func Info(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Info(msg, fields...)
 	}
 }
 
-// Warn 記錄 warn 訊息。
+// Warn logs a warning message.
 func Warn(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Warn(msg, fields...)
 	}
 }
 
-// Error 記錄 error 訊息。
+// Error logs an error message.
 func Error(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Error(msg, fields...)
 	}
 }
 
-// Fatal 記錄 fatal 訊息並由 zap 結束程序。
+// Fatal logs a fatal message and lets zap terminate the process.
 func Fatal(msg string, fields ...Field) {
 	if globalLogger != nil {
 		globalLogger.Fatal(msg, fields...)
 	}
 }
 
-// SetLevel 動態調整全域 logger level。
+// SetLevel changes the global logger's level dynamically.
 func SetLevel(level string) {
 	zapGlobalLevel.SetLevel(parseLevel(level))
 	Info("log level changed", String("level", level))
 }
 
-// GetLogger 回傳目前全域 zap logger。
+// GetLogger returns the current global zap logger.
 func GetLogger() *zap.Logger {
 	return globalLogger
 }
 
-// Sync 將全域 logger 的緩衝資料同步至輸出。
+// Sync flushes the global logger's buffered data to its outputs.
 func Sync() error {
 	if globalLogger != nil {
 		return globalLogger.Sync()

@@ -32,15 +32,15 @@ func TestNewNoEscapeJSONEncoderPreservesHTMLCharacters(t *testing.T) {
 			)
 
 			if !strings.Contains(output, tt.value) {
-				t.Errorf("輸出未保留 HTML 字元：%q", output)
+				t.Errorf("output did not preserve HTML characters: %q", output)
 			}
 			if strings.Contains(strings.ToLower(output), tt.escapedHex) {
-				t.Errorf("輸出不應包含 HTML unicode escape %q：%q", tt.escapedHex, output)
+				t.Errorf("output must not contain HTML Unicode escape %q: %q", tt.escapedHex, output)
 			}
 
 			decoded := decodeTestJSON(t, output)
 			if decoded["msg"] != tt.value || decoded["field"] != tt.value {
-				t.Errorf("JSON 解碼值不符：got %#v，want %q", decoded, tt.value)
+				t.Errorf("decoded JSON value: got %#v, want %q", decoded, tt.value)
 			}
 		})
 	}
@@ -64,7 +64,7 @@ func TestNewNoEscapeJSONEncoderMatchesZap(t *testing.T) {
 	))
 
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("wrapper 與 zap encoder 輸出不一致：got %#v，want %#v", got, want)
+		t.Errorf("wrapper and zap encoder differ: got %#v, want %#v", got, want)
 	}
 }
 
@@ -73,13 +73,13 @@ func TestDisableHTMLEscapingReturnsOriginalLogger(t *testing.T) {
 
 	result := DisableHTMLEscaping(logger)
 	if result != logger {
-		t.Fatal("DisableHTMLEscaping 應原樣回傳既有 logger")
+		t.Fatal("DisableHTMLEscaping must return the logger unchanged")
 	}
 }
 
 func TestDisableHTMLEscapingNilLogger(t *testing.T) {
 	if result := DisableHTMLEscaping(nil); result != nil {
-		t.Fatalf("nil logger 應回傳 nil，got %p", result)
+		t.Fatalf("nil logger must return nil, got %p", result)
 	}
 }
 
@@ -100,7 +100,7 @@ func encodeTestEntry(
 
 	buf, err := encoder.EncodeEntry(entry, fields)
 	if err != nil {
-		t.Fatalf("編碼 entry 失敗：%v", err)
+		t.Fatalf("encode entry: %v", err)
 	}
 	defer buf.Free()
 
@@ -112,7 +112,7 @@ func decodeTestJSON(t *testing.T, output string) map[string]any {
 
 	var decoded map[string]any
 	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
-		t.Fatalf("輸出不是有效 JSON：%v；內容：%q", err, output)
+		t.Fatalf("invalid JSON output: %v; content: %q", err, output)
 	}
 	return decoded
 }

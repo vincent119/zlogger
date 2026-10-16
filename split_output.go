@@ -1,7 +1,7 @@
-// Package zlogger 提供依日誌級別分檔的輸出功能。
+// Package zlogger provides separate outputs for log severity levels.
 //
-// DEBUG 與 INFO 寫入 info 檔，WARN 寫入 warn 檔，ERROR 以上寫入 error 檔。
-// 每日換檔 worker 會在 Close 回傳前停止，避免關閉後重新開啟檔案。
+// DEBUG and INFO go to the info file, WARN to warn, and ERROR or above to error.
+// The daily rotation worker stops before Close returns, preventing files from reopening after shutdown.
 package zlogger
 
 import (
@@ -22,35 +22,35 @@ type writeSyncCloser interface {
 	Close() error
 }
 
-// ErrInvalidSplitCore 表示分級 core 缺少必要的 encoder 或 sink。
-var ErrInvalidSplitCore = errors.New("分級 core 設定無效")
+// ErrInvalidSplitCore indicates a missing encoder or sink.
+var ErrInvalidSplitCore = errors.New("invalid split core configuration")
 
-// SplitSinks 定義標準日誌級別的三路輸出。
+// SplitSinks defines three outputs for standard log severity levels.
 //
-// Info 接收 DEBUG 與 INFO，Warn 接收 WARN，Error 接收 ERROR 以上級別。
-// 三個欄位應使用不同的 sink，且資源所有權始終屬於呼叫端。
+// Info receives DEBUG and INFO, Warn receives WARN, and Error receives ERROR or above.
+// Use distinct sinks for the three fields. Resource ownership remains with the caller.
 type SplitSinks struct {
 	Info  zapcore.WriteSyncer
 	Warn  zapcore.WriteSyncer
 	Error zapcore.WriteSyncer
 }
 
-// NewSplitCore 使用呼叫端提供的 encoder 與 sinks 建立分級 core。
+// NewSplitCore creates a severity-routing core with the caller's encoder and sinks.
 //
-// 本函式會為每路輸出複製 encoder，不取得 sinks 的資源所有權，也不負責關閉 sinks。
-// 呼叫端應在 logger 停止使用後先執行 Sync，再自行關閉可關閉的底層資源。
+// It clones the encoder for each output and neither takes ownership of nor closes the sinks.
+// Stop using the logger, call Sync, and then close the underlying resources yourself.
 func NewSplitCore(encoder zapcore.Encoder, sinks SplitSinks) (zapcore.Core, error) {
 	if encoder == nil {
-		return nil, fmt.Errorf("%w: encoder 不可為 nil", ErrInvalidSplitCore)
+		return nil, fmt.Errorf("%w: encoder must not be nil", ErrInvalidSplitCore)
 	}
 	if sinks.Info == nil {
-		return nil, fmt.Errorf("%w: info sink 不可為 nil", ErrInvalidSplitCore)
+		return nil, fmt.Errorf("%w: info sink must not be nil", ErrInvalidSplitCore)
 	}
 	if sinks.Warn == nil {
-		return nil, fmt.Errorf("%w: warn sink 不可為 nil", ErrInvalidSplitCore)
+		return nil, fmt.Errorf("%w: warn sink must not be nil", ErrInvalidSplitCore)
 	}
 	if sinks.Error == nil {
-		return nil, fmt.Errorf("%w: error sink 不可為 nil", ErrInvalidSplitCore)
+		return nil, fmt.Errorf("%w: error sink must not be nil", ErrInvalidSplitCore)
 	}
 	return buildSplitCore(encoder, sinks), nil
 }
@@ -148,9 +148,9 @@ func (t *systemRotationTimer) Stop() bool {
 	return t.timer.Stop()
 }
 
-// SplitOutput 將不同日誌級別寫入不同檔案。
+// SplitOutput writes each log level to its corresponding file.
 //
-// 級別對應如下：
+// Level routing:
 //   - DEBUG、INFO：{prefix}-info-{date}.log
 //   - WARN：{prefix}-warn-{date}.log
 //   - ERROR、DPANIC、PANIC、FATAL：{prefix}-error-{date}.log
@@ -172,16 +172,16 @@ type SplitOutput struct {
 	settings  fileOutputSettings
 }
 
-// NewSplitOutput 建立分級日誌輸出，並啟動每日換檔 worker。
-// filePrefix 只能是單一 leaf name；不安全路徑會回傳 ErrUnsafeLogPath。
+// NewSplitOutput creates severity-based file outputs and starts a daily rotation worker.
+// filePrefix must be a single leaf name. Unsafe paths return ErrUnsafeLogPath.
 func NewSplitOutput(directory, filePrefix string) (*SplitOutput, error) {
 	return NewSplitOutputWithOptions(directory, filePrefix)
 }
 
-// NewSplitOutputWithOptions 建立可設定新建目錄與檔案權限的分級輸出。
+// NewSplitOutputWithOptions configures creation permissions for severity-based outputs.
 //
-// 未提供 options 時與 NewSplitOutput 相同。解析後的權限會沿用至每日換檔；
-// 實際權限仍受 process umask 限縮，且不會改寫既有權限。
+// With no options it behaves like NewSplitOutput. Resolved permissions also apply during daily rotation.
+// The process umask can further restrict permissions. Existing permissions are not changed.
 func NewSplitOutputWithOptions(
 	directory string,
 	filePrefix string,
@@ -238,16 +238,16 @@ func newSplitOutputWithSettings(
 	settings fileOutputSettings,
 ) (*SplitOutput, error) {
 	if err := validateLogLeaf(filePrefix, true); err != nil {
-		return nil, fmt.Errorf("驗證分級日誌 prefix: %w", err)
+		return nil, fmt.Errorf("validate split log prefix: %w", err)
 	}
-	if err := validateFileOutputPermission("目錄", settings.dirPerm, 0o700); err != nil {
+	if err := validateFileOutputPermission("directory", settings.dirPerm, 0o700); err != nil {
 		return nil, err
 	}
-	if err := validateFileOutputPermission("檔案", settings.filePerm, 0o600); err != nil {
+	if err := validateFileOutputPermission("file", settings.filePerm, 0o600); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(directory, settings.dirPerm); err != nil {
-		return nil, fmt.Errorf("建立日誌目錄失敗：%w", err)
+		return nil, fmt.Errorf("create log directory: %w", err)
 	}
 
 	output := &SplitOutput{
@@ -290,11 +290,11 @@ func openSplitFilesWithPermissions(
 		filePrefix+"-error-"+date+".log",
 	)
 	if err != nil {
-		return splitFileSet{}, fmt.Errorf("開啟分級日誌檔失敗：%w", err)
+		return splitFileSet{}, fmt.Errorf("open split log files: %w", err)
 	}
 	if len(opened) != 3 {
 		return splitFileSet{}, errors.Join(
-			fmt.Errorf("取得分級日誌檔案數量 %d，預期 3: %w", len(opened), os.ErrInvalid),
+			fmt.Errorf("got %d split log files, expected 3: %w", len(opened), os.ErrInvalid),
 			closeRootedLogFiles(opened),
 		)
 	}
@@ -326,7 +326,7 @@ func (s *SplitOutput) openFiles() error {
 	s.mutex.Lock()
 	if s.closed {
 		s.mutex.Unlock()
-		return fmt.Errorf("分級輸出已關閉：%w", os.ErrClosed)
+		return fmt.Errorf("split output is closed: %w", os.ErrClosed)
 	}
 	clock := s.clock
 	opener := s.opener
@@ -334,7 +334,7 @@ func (s *SplitOutput) openFiles() error {
 	s.mutex.Unlock()
 
 	if clock == nil || opener == nil {
-		return fmt.Errorf("分級輸出尚未初始化：%w", os.ErrInvalid)
+		return fmt.Errorf("split output is not initialized: %w", os.ErrInvalid)
 	}
 
 	date := clock.Now().Format("2006-01-02")
@@ -347,7 +347,7 @@ func (s *SplitOutput) openFiles() error {
 	if s.closed {
 		s.mutex.Unlock()
 		return errors.Join(
-			fmt.Errorf("分級輸出已關閉：%w", os.ErrClosed),
+			fmt.Errorf("split output is closed: %w", os.ErrClosed),
 			newFiles.close(),
 		)
 	}
@@ -376,21 +376,21 @@ func (s *SplitOutput) rotateDaily() {
 					return
 				}
 				s.settings.observer.report("rotate", "split", err)
-				fmt.Fprintf(os.Stderr, "每日換檔失敗：%v\n", err)
+				fmt.Fprintf(os.Stderr, "daily log rotation failed: %v\n", err)
 			}
 		}
 	}
 }
 
-// Write 依日誌級別寫入對應檔案。
+// Write sends data to the file for the supplied log level.
 func (s *SplitOutput) Write(level zapcore.Level, data []byte) (n int, err error) {
-	// defer 後進先出，先釋放輸出鎖再發布事件，避免通知延長臨界區。
+	// Defers run in reverse order: release the output lock before reporting to keep notification outside the critical section.
 	defer func() { s.settings.observer.report("write", "split", err) }()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if s.closed {
-		return 0, fmt.Errorf("分級輸出已關閉：%w", os.ErrClosed)
+		return 0, fmt.Errorf("split output is closed: %w", os.ErrClosed)
 	}
 
 	var output io.Writer
@@ -405,19 +405,19 @@ func (s *SplitOutput) Write(level zapcore.Level, data []byte) (n int, err error)
 		output = s.infoOut
 	}
 	if output == nil {
-		return 0, fmt.Errorf("分級輸出尚未初始化：%w", os.ErrInvalid)
+		return 0, fmt.Errorf("split output is not initialized: %w", os.ErrInvalid)
 	}
 	return output.Write(data)
 }
 
-// Sync 將所有分級日誌檔同步至儲存裝置。
+// Sync flushes all severity-based log files to storage.
 func (s *SplitOutput) Sync() (err error) {
 	defer func() { s.settings.observer.report("sync", "split", err) }()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if s.closed {
-		return fmt.Errorf("分級輸出已關閉：%w", os.ErrClosed)
+		return fmt.Errorf("split output is closed: %w", os.ErrClosed)
 	}
 	return s.currentFiles().sync()
 }
@@ -428,7 +428,7 @@ func (s *SplitOutput) syncLevel(level zapcore.Level) (err error) {
 	defer s.mutex.Unlock()
 
 	if s.closed {
-		return fmt.Errorf("分級輸出已關閉：%w", os.ErrClosed)
+		return fmt.Errorf("split output is closed: %w", os.ErrClosed)
 	}
 
 	var output writeSyncCloser
@@ -441,12 +441,12 @@ func (s *SplitOutput) syncLevel(level zapcore.Level) (err error) {
 		output = s.infoOut
 	}
 	if output == nil {
-		return fmt.Errorf("分級輸出尚未初始化：%w", os.ErrInvalid)
+		return fmt.Errorf("split output is not initialized: %w", os.ErrInvalid)
 	}
 	return output.Sync()
 }
 
-// Close 停止每日換檔 worker，並關閉所有分級日誌檔。
+// Close stops the daily rotation worker and closes all severity-based log files.
 func (s *SplitOutput) Close() error {
 	s.closeOnce.Do(func() {
 		s.mutex.Lock()
@@ -481,9 +481,9 @@ func (w *splitOutputWrapper) Sync() error {
 	return w.so.syncLevel(w.lvl)
 }
 
-// GetSplitCore 建立依級別分檔的 zap core。
+// GetSplitCore creates a zap core with separate files by severity.
 //
-// cleanup 會同步停止換檔 worker 並關閉所有檔案。呼叫端應在 logger 不再使用後執行 cleanup。
+// Cleanup synchronously stops rotation and closes all files. Stop using the logger before calling it.
 func GetSplitCore(
 	directory string,
 	filePrefix string,
@@ -492,9 +492,9 @@ func GetSplitCore(
 	return GetSplitCoreWithOptions(directory, filePrefix, encoderConfig)
 }
 
-// GetSplitCoreWithOptions 建立可設定檔案建立權限的分級 zap core。
+// GetSplitCoreWithOptions configures file creation permissions for a severity-routing zap core.
 //
-// 未提供 options 時與 GetSplitCore 相同，cleanup 契約維持不變。
+// With no options it behaves like GetSplitCore. The cleanup contract is unchanged.
 func GetSplitCoreWithOptions(
 	directory string,
 	filePrefix string,
@@ -508,8 +508,8 @@ func GetSplitCoreWithOptions(
 	return core, func() { _ = cleanup() }, nil
 }
 
-// GetSplitCoreWithCleanup 建立每日三檔 core，並保留 cleanup 的關閉錯誤。
-// 呼叫端應先停止使用 logger 並執行 Sync，再呼叫可重複及並行執行的 cleanup。
+// GetSplitCoreWithCleanup creates a daily three-file core and preserves cleanup close errors.
+// Stop using the logger and call Sync before cleanup. Cleanup supports repeated and concurrent calls.
 func GetSplitCoreWithCleanup(
 	directory, filePrefix string,
 	encoderConfig zapcore.EncoderConfig,

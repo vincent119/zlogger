@@ -65,7 +65,7 @@ type AppConfig struct {
 
 file, err := os.Open("config.json")
 if err != nil {
-	return fmt.Errorf("開啟設定檔: %w", err)
+	return fmt.Errorf("open configuration file: %w", err)
 }
 defer func() { _ = file.Close() }()
 
@@ -73,12 +73,12 @@ var appConfig AppConfig
 decoder := json.NewDecoder(io.LimitReader(file, 1<<20))
 decoder.DisallowUnknownFields()
 if err := decoder.Decode(&appConfig); err != nil {
-	return fmt.Errorf("解析設定檔: %w", err)
+	return fmt.Errorf("decode configuration file: %w", err)
 }
 
 cleanup, err := zlogger.Configure(&appConfig.Log)
 if err != nil {
-	return fmt.Errorf("設定 logger: %w", err)
+	return fmt.Errorf("configure logger: %w", err)
 }
 defer func() { _ = cleanup() }()
 ```

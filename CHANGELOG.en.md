@@ -10,7 +10,20 @@ This document records user-visible changes in each zlogger release. Its format f
 
 ## [Unreleased]
 
-There are no recorded changes yet.
+### Changed
+
+- Existing Go comments, package-owned errors and diagnostics, and example output now use English. Documentation remains available in Traditional Chinese and English. Caller messages, field values, Unicode test fixtures, and external errors are not translated.
+- Fixed error strings have changed. Use `errors.Is`/`errors.As` rather than matching complete strings. Check existing alerts and string-based tests for compatibility. Error identities, wrapping chains, and APIs are unchanged.
+
+| Previous fixed text | New fixed text |
+| --- | --- |
+| logger 設定無效 | `invalid logger configuration` |
+| 全域 logger 已完成設定 | `global logger is already configured` |
+| 日誌檔案路徑不安全 | `unsafe log file path` |
+| 檔案輸出權限無效 | `invalid log file permissions` |
+| 分級 core 設定無效 | `invalid split core configuration` |
+| 日誌遮罩處理失敗 | `log redaction failed` |
+| 每日換檔失敗： | `daily log rotation failed:` |
 
 ## [1.1.0] - 2026-07-31
 
