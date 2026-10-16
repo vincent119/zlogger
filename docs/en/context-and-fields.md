@@ -1,5 +1,10 @@
 # Context and Fields
 
+## 遮罩欄位綁定
+
+先建構 `NewRedactingCore` 再綁定 With／WithLazy 或 context 欄位，Enabled 預設 false，
+Keys 在建構時固定；手動 Redacted 不受開關影響。參見[欄位契約](../zh-TW/context-and-fields.md)。
+
 [繁體中文](../zh-TW/context-and-fields.md) | **English**
 
 [Documentation index](README.md)

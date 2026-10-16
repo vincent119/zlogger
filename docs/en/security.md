@@ -1,5 +1,12 @@
 # Security
 
+## 建構時啟用欄位遮罩
+
+`NewRedactingCore` 與 `RedactionConfig` 預設不啟用遮罩；Enabled=true 時才驗證並複製 Keys。
+匹配 key 與所有 opaque 值固定遮罩，不保護 message、預先綁定的 encoder 欄位或外部 error。
+超限或 marshaler 失敗整筆拒絕，回傳 ErrRedactionFailed。
+完整限制與使用方式見[繁體中文安全性文件](../zh-TW/security.md)。
+
 ## Failure event boundaries
 
 OutputFailure stores no log payload, fields, or additional full path. Err is excluded from

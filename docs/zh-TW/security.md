@@ -1,5 +1,24 @@
 # 安全性
 
+## 建構時啟用欄位遮罩
+
+`NewRedactingCore(encoder, sink, level, RedactionConfig{Enabled: true, Keys: []string{"token", "password"}})`
+建立遮罩 core；零值 Enabled=false，保留一般 zapcore.NewCore 行為且忽略 Keys。
+啟用時 Keys 須有 1 至 128 個項目，每個 1 至 128 bytes，重複項目合併；不去除空白。
+採 ASCII 大小寫不敏感的 leaf name 精確匹配，不支援路徑、正則或執行中更新。
+設定會複製，修改原 slice 不影響已建構 core。設定無效回傳 ErrInvalidConfig。
+
+匹配欄位固定輸出 `[REDACTED]`，不求值原容器；匹配 namespace 遮罩整個子樹。
+Object／Array／Inline 遞迴處理，Reflect、Stringer、Error 即使 key 不匹配也整欄遮罩，
+不呼叫來源 String／Error／MarshalJSON。Any 依 zap 選出的 Field 型別套用同一政策。
+深度超過 32、欄位與元素總預算超過 1024、marshaler 錯誤或 panic 時整筆拒絕，
+回傳固定 ErrRedactionFailed，不寫出部分資料，也不附帶來源錯誤。With 的失敗延後至 Write 回報。
+
+請提供未綁定欄位的可信任 encoder，以及有效的 sink／level；不保護既有 encoder 欄位、
+message、自由文字、key 名稱、呼叫端在建立 Field 前的求值、外部 hook 或原始 I/O error。
+無法中止不返回的使用者 marshaler；它仍屬可信任程式碼。遮罩不取代欄位 allowlist。
+本 API 不關閉 sink，亦不建立 worker。直接 core.Write 可取得錯誤；logger 則交給 ErrorOutput。
+
 ## 故障事件的敏感資訊邊界
 
 OutputFailure 不保存日誌本文、fields 或額外完整路徑，Err 也不參與 JSON／YAML 序列化。

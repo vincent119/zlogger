@@ -147,9 +147,15 @@ Configure。不需要 global 狀態時，使用 `New`／`NewWithOptions` 持有 
 | global 日誌 | `Debug`、`Info`、`Warn`、`Error`、`Fatal`、`SetLevel` |
 | context | `WithContext`、`FromContext`、`WithRequestID`、`WithTraceID`、`WithOperation`、`WithComponent` |
 | 分級輸出 | `GetSplitCore`、`NewSplitOutput`、`NewSplitCore`、`SplitSinks` |
+| 敏感欄位 | `Redacted`、`NewRedactingCore`、`RedactionConfig` |
+
+自動遮罩預設關閉。`NewRedactingCore(encoder, sink, level, cfg)` 以
+`RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}` 明確啟用，
+再透過 `ConfigureCore` 設為 global logger。設定在建構時固定，不支援執行中切換。
+自由文字 message 不受保護；完整限制見[安全性](docs/zh-TW/security.md)。
 
 主要 sentinel errors：`ErrInvalidConfig`、`ErrAlreadyConfigured`、`ErrUnsafeLogPath`、
-`ErrInvalidFilePermission`、`ErrInvalidSplitCore` 與 `os.ErrClosed`。使用 `errors.Is` 判斷。
+`ErrInvalidFilePermission`、`ErrInvalidSplitCore`、`ErrRedactionFailed` 與 `os.ErrClosed`。使用 `errors.Is` 判斷。
 
 ## 開發與品質驗證
 

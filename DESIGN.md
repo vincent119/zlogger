@@ -1,5 +1,18 @@
 # zlogger 設計方法說明
 
+## 敏感欄位遮罩
+
+`NewRedactingCore(encoder, sink, level, cfg)` 建構自有 core，而非包裝任意既有 core。
+啟用時先在 With／Write 安全化 Field，再交給私有 ioCore，避免 Error／Stringer 在
+With 中先求值。呼叫端可在外層加 RegisterHooks，再使用 ConfigureCore；不改既有
+custom core 的 Check 契約。停用時直接回傳一般 zapcore.NewCore，不保存 Keys。
+
+政策在建構時複製且不可變；key 採 ASCII 大小寫不敏感的 leaf name 精確匹配。
+Object／Array／Inline 先有界記錄成安全欄位再重播；opaque 整欄遮罩而不反射求值。
+深度 32、欄位與元素總預算 1024，超限、marshaler 錯誤或 panic 皆回傳固定
+ErrRedactionFailed，該筆不送至 sink。With 的錯誤保存至後續 Write。
+本層不新增 worker、不接管 sink 關閉，不保護 message 或建構前綁入 encoder 的欄位。
+
 ## 輸出故障觀察
 
 FailureObserver 以容量 1 至 1024 的 channel 與 atomic Dropped 提供非阻塞旁路事件，
@@ -260,7 +273,7 @@ type Field = zap.Field
 
 - zlogger 不根據 field key 或 message 內容執行隱含字串改寫。
 - 名為 `sql` 的 field 與一般 string field 套用相同規則，不會自動移除反斜線或引號。
-- SQL formatting、redaction 與參數化查詢屬呼叫端或資料庫層責任，不是 logger 的隱含行為。
+- SQL formatting 與參數化查詢屬呼叫端或資料庫層責任；欄位遮罩須明確啟用 NewRedactingCore，不是預設隱含行為。
 - `DisableHTMLEscaping` 無法修改既有 logger 的 encoder；compatibility 實作只原樣回傳輸入 logger。
 
 ---
@@ -442,7 +455,7 @@ func Info(msg string, fields ...Field) {
 - `os.Root` 不等同 filesystem sandbox：`OpenRoot` 會跟隨 base path symlink，且不防 mount boundary、bind mount、特殊裝置或惡意 filesystem。競態中的 root 內 symlink 可能被跟隨，不承諾原子拒絕所有 symlink。
 - Go `js`、`plan9`、`wasip1` 另有標準庫限制；目前跨平台 CI 契約為 Linux、macOS 與 Windows。
 - 敏感欄位採白名單；token、密碼、Authorization、cookie 與完整個資不得進入日誌。
-- `Redacted` 需由呼叫端主動使用，不提供自動 redaction。
+- `Redacted` 需由呼叫端主動使用；自動欄位遮罩僅在 NewRedactingCore 明確啟用時提供。
 
 ---
 
