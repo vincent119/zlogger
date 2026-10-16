@@ -59,6 +59,31 @@ cleanup。自訂權限使用 `GetSplitCoreWithOptions`。
 
 ## 自訂 sinks
 
+### 故障觀察
+
+```go
+observer, err := zlogger.NewFailureObserver(1)
+if err != nil {
+	return err
+}
+observedSink, err := zlogger.NewObservedWriteSyncer(sink, observer)
+if err != nil {
+	return err
+}
+// 將 observedSink 傳入 zapcore.NewCore 或 SplitSinks。
+```
+
+observer 容量為 1 至 1024，滿載丟棄新事件並累計 `Dropped()`。成功不發事件；失敗事件
+包含 Operation（write／sync／rotate／close）、Output（sink／split）、UTC OccurredAt 與
+原 Err。外部 wrapper 只回報 sink Write／Sync，保留原 n／error，不涵蓋編碼錯誤，
+不介入 core Check／hooks。tee 每個已包裝 sink 各自回報，不聚合或跨 wrapper 去重。
+
+每日 split 的所有 options 入口可用 `WithOutputObserver(observer)`；Write、Sync、
+rotation 與一次性 Close 原生通知，不再另包同一輸出的 sink wrapper。一般 NewWithOptions／
+ConfigureWithOptions 不支援此 option，回傳 ErrInvalidConfig；外部 sink 請自行包裝。
+
+### 分級 core
+
 ```go
 core, err := zlogger.NewSplitCore(
 	zapcore.NewJSONEncoder(encoderConfig),

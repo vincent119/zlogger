@@ -13,6 +13,36 @@ import (
 
 var benchmarkContextResult context.Context
 
+func BenchmarkObserver(b *testing.B) {
+	for _, name := range []string{"disabled", "success", "failure_drained", "failure_full"} {
+		b.Run(name, func(b *testing.B) {
+			observer, err := NewFailureObserver(1)
+			if err != nil {
+				b.Fatal(err)
+			}
+			sink := zapcore.AddSync(io.Discard)
+			if name == "failure_drained" || name == "failure_full" {
+				sink = failingObserverSink{writeErr: io.ErrClosedPipe}
+			}
+			if name != "disabled" {
+				sink, err = NewObservedWriteSyncer(sink, observer)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+			payload := []byte("日誌訊息")
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				_, _ = sink.Write(payload)
+				if name == "failure_drained" {
+					<-observer.Events()
+				}
+			}
+		})
+	}
+}
+
 type benchmarkWriteSyncCloser struct{}
 
 func (benchmarkWriteSyncCloser) Write(p []byte) (int, error) {

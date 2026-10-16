@@ -1,5 +1,13 @@
 # zlogger 設計方法說明
 
+## 輸出故障觀察
+
+FailureObserver 以容量 1 至 1024 的 channel 與 atomic Dropped 提供非阻塞旁路事件，
+不新增 worker。NewObservedWriteSyncer 只委派 sink Write／Sync，保留原 n／error，
+不攔截 custom core Check／hooks 或編碼錯誤；tee 各 sink 分別通知。SplitOutput 在鎖外
+原生回報 write／sync／rotate／close，Close 事件位於 closeOnce 內，只對實際操作發送。
+原 stderr 與回傳錯誤保留。WithOutputObserver 只適用 split options，標準建構明確拒絕。
+
 ## split Instance 與 custom core global 擴充
 
 `GetSplitCoreWithCleanup` 保留 SplitOutput.Close 錯誤；舊 GetSplitCore 透過 adapter 保持

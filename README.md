@@ -1,5 +1,9 @@
 # zlogger
 
+需要觀察輸出故障時，建立 `NewFailureObserver(1)`，並以 `NewObservedWriteSyncer` 包裝
+外部 sink；每日 split 使用 `WithOutputObserver(observer)`。事件以有界通道非阻塞發送，
+滿載可由 `Dropped()` 查詢；不涵蓋 core 編碼錯誤。詳見[輸出模式](docs/zh-TW/output-modes.md)。
+
 每日 core 需要回傳關閉錯誤時使用 `GetSplitCoreWithCleanup`；獨立每日 logger 使用
 `NewSplit`，全域每日 logger 使用 `ConfigureSplit`，自訂 core 全域設定使用 `ConfigureCore`。
 新 global cleanup 與 split Instance.Close 自動 Sync，再關閉自有資源；外部資源僅執行

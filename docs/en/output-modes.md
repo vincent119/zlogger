@@ -59,6 +59,21 @@ Close, `Write` and `Sync` return errors wrapping `os.ErrClosed`.
 
 ## Custom Sinks
 
+### Failure observation
+
+Create an observer with `NewFailureObserver(capacity)` (1–1024) and wrap the external sink using
+`NewObservedWriteSyncer(sink, observer)` before passing it to a core. Successful operations emit
+no events. Failures preserve the original write count and error. Events contain Operation
+(write/sync/rotate/close), Output (sink/split), UTC OccurredAt, and Err. Full buffers drop new
+events and increment Dropped. Core encoding errors are not covered; Check and hooks are untouched.
+Each wrapped tee sink reports independently, without cross-wrapper deduplication.
+
+Daily split option entry points accept `WithOutputObserver(observer)` and report Write, Sync,
+rotation, and the one actual Close natively. Avoid wrapping the same output twice. Standard
+NewWithOptions/ConfigureWithOptions reject this split-only option with ErrInvalidConfig.
+
+### Level-based core
+
 ```go
 core, err := zlogger.NewSplitCore(
 	zapcore.NewJSONEncoder(encoderConfig),

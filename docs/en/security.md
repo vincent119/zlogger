@@ -1,5 +1,13 @@
 # Security
 
+## Failure event boundaries
+
+OutputFailure stores no log payload, fields, or additional full path. Err is excluded from
+JSON/YAML serialization, but the original error may still contain paths or other internal data.
+Do not forward event.Err, its string, or an entire formatted event to external alerts without
+review. The observer is bounded best-effort notification, not durable storage; monitor Dropped.
+Callers must provide a valid WriteSyncer; interface nil checks do not detect typed nil pointers.
+
 [繁體中文](../zh-TW/security.md) | **English**
 
 [Documentation index](README.md)

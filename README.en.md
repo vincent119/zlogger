@@ -1,5 +1,10 @@
 # zlogger
 
+Create `NewFailureObserver(1)` and wrap external sinks with `NewObservedWriteSyncer` to observe
+output failures. Daily split APIs accept `WithOutputObserver(observer)`. Events use a bounded,
+nonblocking channel with a `Dropped()` counter; core encoding errors are not covered.
+See [Output Modes](docs/en/output-modes.md).
+
 Use GetSplitCoreWithCleanup for daily cores with Close error propagation, NewSplit for independent
 daily instances, ConfigureSplit for daily globals, and ConfigureCore for custom globals. New
 global cleanup and split Instance.Close sync before closing owned resources. External cleanup

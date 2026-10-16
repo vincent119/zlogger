@@ -16,6 +16,37 @@ var (
 	_ func(string, string, zapcore.EncoderConfig) (zapcore.Core, func(), error) = GetSplitCore
 )
 
+func TestOutputObserverOptions(t *testing.T) {
+	o := newTestObserver(t, 1)
+	var zero FailureObserver
+	for _, opts := range [][]FileOutputOption{
+		{WithOutputObserver(nil)}, {WithOutputObserver(&zero)}, {WithOutputObserver(o), WithOutputObserver(o)},
+	} {
+		base := filepath.Join(t.TempDir(), "不應建立")
+		if s, err := NewSplitOutputWithOptions(base, "app", opts...); s != nil || !errors.Is(err, ErrInvalidConfig) {
+			t.Fatal(err)
+		}
+		assertPathDoesNotExist(t, base)
+	}
+	cfg := fileOutputTestConfig(filepath.Join(t.TempDir(), "不應建立"), "app.log")
+	if i, err := NewWithOptions(cfg, WithOutputObserver(o)); i != nil || !errors.Is(err, ErrInvalidConfig) {
+		t.Fatal(err)
+	}
+	assertPathDoesNotExist(t, cfg.LogPath)
+	s, err := NewSplitOutputWithOptions(t.TempDir(), "app", WithOutputObserver(o))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-o.Events():
+		t.Fatal(event)
+	default:
+	}
+}
+
 func TestFileOutputOptionsDefaultsAndLastWins(t *testing.T) {
 	settings, err := resolveFileOutputOptions()
 	if err != nil {

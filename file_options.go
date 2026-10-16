@@ -9,9 +9,9 @@ import (
 // ErrInvalidFilePermission 表示檔案輸出建立權限不符合安全契約。
 var ErrInvalidFilePermission = errors.New("檔案輸出權限無效")
 
-// FileOutputOption 設定新建日誌目錄與檔案的權限。
+// FileOutputOption 設定檔案建立權限，或 split 專屬輸出觀察。
 //
-// Option 只能由本 package 提供的 WithDirPerm 與 WithFilePerm 建立。
+// Option 只能由本 package 的 WithDirPerm、WithFilePerm、WithOutputObserver 建立。
 type FileOutputOption interface {
 	applyFileOutput(*fileOutputSettings) error
 }
@@ -31,6 +31,25 @@ type fileOutputOption struct {
 type fileOutputSettings struct {
 	dirPerm  os.FileMode
 	filePerm os.FileMode
+	observer *FailureObserver
+}
+
+type outputObserverOption struct {
+	observer *FailureObserver
+}
+
+// WithOutputObserver 為 split 系列 options 入口登記故障觀察，不得重複或使用 nil／零值。
+// 一般 NewWithOptions／ConfigureWithOptions 不支援此 option，會回傳 ErrInvalidConfig。
+func WithOutputObserver(observer *FailureObserver) FileOutputOption {
+	return outputObserverOption{observer: observer}
+}
+
+func (o outputObserverOption) applyFileOutput(settings *fileOutputSettings) error {
+	if o.observer == nil || o.observer.events == nil || settings.observer != nil {
+		return fmt.Errorf("%w: observer 未初始化或重複登記", ErrInvalidConfig)
+	}
+	settings.observer = o.observer
+	return nil
 }
 
 // WithDirPerm 設定新建日誌目錄的 permission bits。
