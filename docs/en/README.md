@@ -1,18 +1,22 @@
-# zlogger Documentation
+# Using zlogger
 
-[繁體中文](../zh-TW/README.md) | **English**
+[繁體中文（台灣）](../zh-TW/README.md) | **English**
 
-[Project home](../../README.en.md) | [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger)
+[Project home](../../README.en.md) · [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger)
 
-## Suggested Reading Order
+Start with [configuration](configuration.md) and [lifecycle](lifecycle.md).
+For a first log line, use the example on the project home page.
 
-1. [Configuration](configuration.md): sources, `ConfigPatch`, defaults, and validation.
-2. [Lifecycle](lifecycle.md): globals, instances, cleanup, `Sync`, and `Close`.
-3. [Output modes](output-modes.md): console, file, daily routing, and external sinks.
-4. [Context and fields](context-and-fields.md): request-scoped fields and merge rules.
-5. [Security](security.md): paths, permissions, `os.Root`, and sensitive data.
-6. [Gin integration](integrations/gin.md): caller-owned HTTP middleware.
-7. [timberjack integration](integrations/timberjack.md): size, retention, and compression rotation.
+| What you're working on | Guide |
+| --- | --- |
+| Choosing globals or an independent logger, and deciding who closes it | [Lifecycle](lifecycle.md) |
+| Defaults, configuration loading, and console colors | [Configuration](configuration.md) |
+| Daily files, custom sinks, and output failures | [Output modes](output-modes.md) |
+| Your own field names, context, and duplicate keys | [Context and fields](context-and-fields.md) |
+| Redaction, paths, and file permissions | [Security](security.md) |
+| HTTP request logs in your application | [Gin integration](integrations/gin.md) |
+| Size-based rotation, retention, and compression | [timberjack integration](integrations/timberjack.md) |
 
-The root README provides onboarding and a capability summary. This directory contains the complete
-usage contracts and advanced integration guides.
+These guides follow the current branch.
+Gin and timberjack examples belong in your application, so using zlogger alone doesn't add
+those dependencies or decide your business field names.

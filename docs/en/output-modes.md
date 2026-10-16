@@ -1,95 +1,127 @@
-# Output Modes
+# Output modes and failure events
 
-[繁體中文](../zh-TW/output-modes.md) | **English**
+[繁體中文（台灣）](../zh-TW/output-modes.md) | **English**
 
 [Documentation index](README.md)
 
-## Choosing a Mode
+Regular file output writes one file. Use a split constructor for separate daily info,
+warn, and error files. External sinks such as [timberjack](integrations/timberjack.md)
+handle size-based rotation, retention, and compression.
 
-| Requirement | Entry point | Rotation | Ownership |
-| --- | --- | --- | --- |
-| Console or one file | `Configure` / `New` | None | Cleanup / Instance |
-| Three daily files | `GetSplitCore` | Daily | Returned cleanup |
-| Daily files with close errors | `GetSplitCoreWithCleanup` | Daily | Sync first, then `func() error` |
-| Independent daily logger | `NewSplit` | Daily | Instance.Close syncs and closes |
-| Global daily logger | `ConfigureSplit` | Daily | Cleanup syncs and closes |
-| Global custom core | `ConfigureCore` | Core-defined | Explicit WithCoreCleanup |
-| Direct daily output | `NewSplitOutput` / `NewSplitOutputWithOptions` | Daily | Caller closes it |
-| Three custom sinks | `NewSplitCore` | Sink-defined | Caller manages sinks |
+## Choose an output
 
-The `file` value in `Config.Outputs` writes one file and never creates `SplitOutput` automatically.
+| What you need | Entry point | Ownership |
+| --- | --- | --- |
+| Console or a regular file | `Configure` / `New` | Sync, then cleanup / Close |
+| Global daily files | `ConfigureSplit` | Cleanup syncs and closes |
+| Independent daily files | `NewSplit` | Instance.Close syncs and closes |
+| A daily core to assemble yourself | `GetSplitCoreWithCleanup` | Sync first, then cleanup with close errors |
+| Direct access to daily output | `NewSplitOutput` / `NewSplitOutputWithOptions` | The caller syncs and closes |
+| Three external sinks by level | `NewSplitCore` | The caller syncs and closes sinks |
+| A global custom core | `ConfigureCore` | Cleanup syncs, then runs registered cleanup |
 
-GetSplitCoreWithCleanup accepts the existing first three parameters plus optional FileOutputOption
-values and returns `(core, func() error, error)`. It preserves Close errors without automatic
-Sync or global publication. NewSplit and ConfigureSplit always create three daily files.
+`GetSplitCore` and `GetSplitCoreWithOptions` remain available, but their legacy `func()`
+discards Close errors. `GetSplitCoreWithCleanup` neither syncs automatically nor sets globals.
 
-## Daily Level-Based Output
+## Three daily files
 
-```go
-core, cleanup, err := zlogger.GetSplitCore(
-	"./logs",
-	"app",
-	zapcore.EncoderConfig{
-		TimeKey:    "ts",
-		LevelKey:   "level",
-		MessageKey: "msg",
-		EncodeTime: zapcore.ISO8601TimeEncoder,
-		EncodeLevel: zapcore.CapitalLevelEncoder,
-	},
-)
-if err != nil {
-	return err
-}
-logger := zap.New(core)
-defer func() {
-	_ = logger.Sync()
-	cleanup()
-}()
-```
+The info file receives DEBUG and INFO, warn receives WARN, and error receives ERROR,
+DPANIC, PANIC, and FATAL. Configured level thresholds still apply.
+The default info threshold filters out DEBUG.
 
-- info file: DEBUG and INFO
-- warn file: WARN
-- error file: ERROR, DPANIC, PANIC, and FATAL
-
-Cleanup stops the rotation goroutine and closes files. Stop using the logger, call `Sync`, and then
-run cleanup. Use `GetSplitCoreWithOptions` for custom creation permissions.
-
-When holding `SplitOutput` directly, `Close` is safe for repeated and concurrent calls. After
-Close, `Write` and `Sync` return errors wrapping `os.ErrClosed`.
-
-## Custom Sinks
-
-### Failure observation
-
-Create an observer with `NewFailureObserver(capacity)` (1–1024) and wrap the external sink using
-`NewObservedWriteSyncer(sink, observer)` before passing it to a core. Successful operations emit
-no events. Failures preserve the original write count and error. Events contain Operation
-(write/sync/rotate/close), Output (sink/split), UTC OccurredAt, and Err. Full buffers drop new
-events and increment Dropped. Core encoding errors are not covered; Check and hooks are untouched.
-Each wrapped tee sink reports independently, without cross-wrapper deduplication.
-
-Daily split option entry points accept `WithOutputObserver(observer)` and report Write, Sync,
-rotation, and the one actual Close natively. Avoid wrapping the same output twice. Standard
-NewWithOptions/ConfigureWithOptions reject this split-only option with ErrInvalidConfig.
-
-### Level-based core
+Add this function to your project to write daily files under ./logs.
+Its returned error preserves both sync and close failures.
 
 ```go
-core, err := zlogger.NewSplitCore(
-	zapcore.NewJSONEncoder(encoderConfig),
-	zlogger.SplitSinks{Info: infoSink, Warn: warnSink, Error: errorSink},
+package example
+
+import (
+	"errors"
+
+	"github.com/vincent119/zlogger"
+	"go.uber.org/zap"
 )
-if err != nil {
-	if errors.Is(err, zlogger.ErrInvalidSplitCore) {
-		return fmt.Errorf("invalid split output: %w", err)
+
+func WriteDailyLog() (err error) {
+	core, cleanup, err := zlogger.GetSplitCoreWithCleanup(
+		"./logs", "app", zap.NewProductionEncoderConfig(),
+	)
+	if err != nil {
+		return err
 	}
-	return err
+	logger := zap.New(core)
+	defer func() {
+		err = errors.Join(err, logger.Sync(), cleanup())
+	}()
+
+	logger.Info("service started")
+	return nil
 }
-logger := zap.New(core)
 ```
 
-Use a different sink for every field. `NewSplitCore` clones the encoder but does not take sink
-ownership or call `Close`. The caller must sync the logger and then close external sinks.
+This low-level core has no separate level gate, so every level supported by split routing
+can pass through unless you add a gate or use NewSplit or ConfigureSplit to apply Config's threshold.
+Those constructors also manage the Instance.
 
-See [Security](security.md) for paths and permissions, and
-[timberjack integration](integrations/timberjack.md) for size and compression rotation.
+SplitOutput.Close accepts repeated and concurrent calls, stops rotation, and closes every file.
+After Close, Write and Sync return errors wrapping `os.ErrClosed`.
+Stop all writers before cleanup.
+
+## Three external sinks
+
+`NewSplitCore(encoder, SplitSinks{Info: infoSink, Warn: warnSink, Error: errorSink})`
+clones the encoder and routes by the levels above. It neither sets globals nor takes ownership.
+Supply three valid sinks backed by different output resources.
+Invalid settings return `ErrInvalidSplitCore`.
+
+Pass the core to `zap.New(core)` or `ConfigureCore`.
+The caller still owns sync and close. Register `WithCoreCleanup` with ConfigureCore
+if its cleanup should release the sinks. See [lifecycle](lifecycle.md).
+
+## Receive output failures
+
+Daily split constructors accept an observer directly.
+Use this fragment inside a function returning error:
+
+```go
+observer, err := zlogger.NewFailureObserver(64)
+if err != nil {
+	return err
+}
+cfg := zlogger.DefaultConfig()
+instance, err := zlogger.NewSplit(cfg, zlogger.WithOutputObserver(observer))
+if err != nil {
+	return err
+}
+defer func() { _ = instance.Close() }()
+instance.Logger().Info("daily output started")
+```
+
+For an external sink, call `NewObservedWriteSyncer(sink, observer)` before passing it to a core.
+The wrapper observes Write and Sync, preserves the original n and error, and has no Close method.
+It doesn't make the sink safe for concurrent calls. Add zapcore.Lock first if needed.
+
+| Event field | Content |
+| --- | --- |
+| Operation | write and sync, plus rotate and close for native split output |
+| Output | sink for an external wrapper, split for native daily output |
+| OccurredAt | UTC timestamp |
+| Err | Original error, available to errors.Is / As |
+
+Success emits no event. Capacity ranges from 1 to 1024.
+A full channel drops new events and increments Dropped without waiting for a consumer.
+Events contain no log body, though Err can still include sensitive data.
+Each wrapped sink reports independently, with no tee aggregation or cross-wrapper deduplication.
+Dropped failure notifications don't mean regular logs are being sampled.
+
+Native split notifications are sent after releasing the output lock.
+Repeated Close calls return the stored error, but only the actual Close emits an event.
+Avoid observing the same output twice.
+
+Regular `NewWithOptions` and `ConfigureWithOptions` reject WithOutputObserver with ErrInvalidConfig.
+Core encoding errors and redaction rejections stay on the original error path or zap ErrorOutput.
+They aren't sink failures.
+
+The observer channel never closes.
+Consumer shutdown is covered in [lifecycle](lifecycle.md).
+Check [security](security.md) before forwarding raw errors.
