@@ -52,7 +52,7 @@ The encoder and downstream parser decide. Avoid duplicate keys.
 
 ## Field helpers and examples
 
-These are the 27 helpers currently defined in fields.go.
+fields.go defines 47 helpers. This table covers the original 27; the following section adds 20 structured-field and typed-slice helpers.
 Each returns a Field. Pass it to Info, With, or another logging entry point to use it.
 The complete example below defines readErr, cacheErr, at, and endpoint.
 JSON descriptions assume a regular zap JSON encoder with automatic redaction disabled.
@@ -216,6 +216,162 @@ Don't compare them byte for byte.
 With automatic redaction disabled, the second entry has only msg,
 and the third includes `"tags":[],"missing":null`.
 
+## Structured fields and typed slices
+
+These 20 helpers delegate to the corresponding zap functions. Together with the table above,
+fields.go provides 47 field helpers. The complete example below defines profile and codes;
+at refers to the time value in the earlier example.
+Any already recognizes ObjectMarshaler and ArrayMarshaler. These explicit helpers make the
+intent clearer rather than adding a new object encoder.
+
+| Function | Behavior | Example |
+| --- | --- | --- |
+| `Object` | Encodes a nested ObjectMarshaler without reflection. | `zlogger.Object("profile", profile{"reader"})` |
+| `Array` | Encodes elements in ArrayMarshaler order. | `zlogger.Array("items", codes{3, 1})` |
+| `Inline` | Expands object fields at the current level without deduplicating keys. | `zlogger.Inline(profile{"inline"})` |
+| `Namespace` | Places subsequent fields in the named child object. | `zlogger.Namespace("request")` |
+| `Bools` | An ordered bool slice. | `zlogger.Bools("values", []bool{true, false})` |
+| `Ints` | An ordered int slice. | `zlogger.Ints("values", []int{-2, 1})` |
+| `Int8s` | An ordered int8 slice. | `zlogger.Int8s("values", []int8{-2, 1})` |
+| `Int16s` | An ordered int16 slice. | `zlogger.Int16s("values", []int16{-2, 1})` |
+| `Int32s` | An ordered int32 slice. | `zlogger.Int32s("values", []int32{-2, 1})` |
+| `Int64s` | An ordered int64 slice. | `zlogger.Int64s("values", []int64{-2, 1})` |
+| `Uints` | An ordered uint slice. | `zlogger.Uints("values", []uint{2, 1})` |
+| `Uint8s` | A numeric uint8 array, distinct from ByteStrings and Binary. | `zlogger.Uint8s("values", []uint8{2, 1})` |
+| `Uint16s` | An ordered uint16 slice. | `zlogger.Uint16s("values", []uint16{2, 1})` |
+| `Uint32s` | An ordered uint32 slice. | `zlogger.Uint32s("values", []uint32{2, 1})` |
+| `Uint64s` | An ordered uint64 slice. | `zlogger.Uint64s("values", []uint64{2, 1})` |
+| `Float32s` | An ordered float32 slice. | `zlogger.Float32s("values", []float32{1.5, -2.25})` |
+| `Float64s` | An ordered float64 slice. | `zlogger.Float64s("values", []float64{1.5, -2.25})` |
+| `Durations` | Durations formatted by EncodeDuration. | `zlogger.Durations("values", []time.Duration{time.Second, 1500 * time.Millisecond})` |
+| `Times` | Times formatted by EncodeTime. | `zlogger.Times("values", []time.Time{at})` |
+| `ByteStrings` | An array of UTF-8 strings, not Base64 or numeric bytes. | `zlogger.ByteStrings("values", [][]byte{[]byte("alpha"), nil, {}})` |
+
+### Marshaler and encoder aliases
+
+These are true Go type aliases, identical to the zapcore interfaces rather than new types.
+
+| Alias | Upstream interface and methods |
+| --- | --- |
+| `ObjectMarshaler` | `zapcore.ObjectMarshaler`, with `MarshalLogObject(ObjectEncoder) error` |
+| `ArrayMarshaler` | `zapcore.ArrayMarshaler`, with `MarshalLogArray(ArrayEncoder) error` |
+| `ObjectEncoder` | `zapcore.ObjectEncoder`, retaining all methods such as AddString, AddArray, and AddObject |
+| `ArrayEncoder` | `zapcore.ArrayEncoder`, retaining all methods such as AppendInt, AppendArray, and AppendObject |
+
+Applications can construct these fields and implement marshalers using only zlogger imports.
+The underlying zap dependency remains. Custom core and encoder construction can still require
+direct zap imports.
+
+### Evaluation, nil values, and scope
+
+Constructing an Object, Array, or Inline Field does not invoke its marshaler.
+The core evaluates it during encoding, which can happen when With binds fields.
+WithLazy follows zap's evaluation timing. Helpers do not copy objects or slices.
+Keep data stable until encoding and synchronize concurrent access yourself.
+
+With a regular JSON encoder, nil and empty typed slices both produce `[]`.
+A nil element in ByteStrings becomes an empty string; Uint8s keeps numeric values.
+There is no extra nil-marshaler handling. An interface holding a nil pointer follows its
+concrete method and core behavior, not the typed-slice nil policy.
+
+Namespace affects subsequent fields, including fields added when logging through a derived
+logger. A With child does not change its parent.
+Inline can introduce duplicate keys. These wrappers neither deduplicate nor promise
+replacement. A downstream JSON parser may retain only the last value.
+
+### A complete example using only zlogger
+
+Save this as main.go and run `go run .`. It creates an independent Instance, writes to a
+temporary file, syncs and closes it, then prints the contents. It removes its own temporary
+directory and does not configure a global logger.
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/vincent119/zlogger"
+)
+
+type profile struct{ name string }
+
+func (p profile) MarshalLogObject(encoder zlogger.ObjectEncoder) error {
+	encoder.AddString("name", p.name)
+	return encoder.AddArray("codes", codes{2, 1})
+}
+
+type codes []int
+
+func (values codes) MarshalLogArray(encoder zlogger.ArrayEncoder) error {
+	for _, value := range values {
+		encoder.AppendInt(value)
+	}
+	return nil
+}
+
+var (
+	_ zlogger.ObjectMarshaler = profile{}
+	_ zlogger.ArrayMarshaler  = codes{}
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+}
+
+func run() (result error) {
+	directory, err := os.MkdirTemp("", "zlogger-structured-fields-")
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, os.RemoveAll(directory)) }()
+	cfg := zlogger.DefaultConfig()
+	cfg.Format, cfg.Outputs = "json", []string{"file"}
+	cfg.LogPath, cfg.FileName, cfg.AddCaller = directory, "fields.log", false
+	instance, err := zlogger.New(cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, instance.Close()) }()
+	instance.Logger().Info("structured fields",
+		zlogger.Object("profile", profile{"reader"}),
+		zlogger.Array("items", codes{3, 1}),
+		zlogger.Inline(profile{"inline"}),
+		zlogger.Ints("attempts", []int{1, 2}),
+		zlogger.Uint8s("numbers", []uint8{65, 66}),
+		zlogger.ByteStrings("texts", [][]byte{[]byte("AB")}),
+		zlogger.Durations("elapsed", []time.Duration{1500 * time.Millisecond}),
+		zlogger.Times("started_at", []time.Time{time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)}),
+		zlogger.Namespace("request"),
+		zlogger.String("id", "r1"),
+	)
+	if err := instance.Sync(); err != nil {
+		return err
+	}
+	if err := instance.Close(); err != nil {
+		return err
+	}
+	data, err := os.ReadFile(filepath.Join(directory, cfg.FileName))
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Print(string(data))
+	return err
+}
+```
+
+The output contains an initialization entry and an application entry; ts varies per run.
+In the application entry, profile is nested, items preserves `[3,1]` order, and Inline places
+name and codes at the top level. request.id belongs to a child object.
+numbers is `[65,66]`, while texts is `["AB"]`. With the default encoder, elapsed is
+`["1.5s"]` and started_at contains a time string. The helpers do not hard-code those formats.
+
 ## Add redaction before binding fields
 
 Build `NewRedactingCore` before using With, WithLazy, or context fields.
@@ -224,4 +380,10 @@ the fixed replacement string.
 
 Enabled redaction matches the field name at each nesting level, not a parent.token path.
 Reflect, Stringer, and Error values are fully masked even when their keys don't match.
+The new helpers follow the same policy. Matched Object or Array containers are not evaluated,
+and a matched Namespace suppresses its subtree. Inline fields are checked in their expanded
+scope. Encoding errors, panics, and depth or budget overruns reject the entire entry without
+partial output. Opaque maps and structs still use the existing whole-field policy.
+Marshalers remain caller code, so these wrappers do not isolate arbitrary side effects or
+stop a marshaler that never returns.
 See [security](security.md) for setup and failure handling.

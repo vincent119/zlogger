@@ -20,6 +20,14 @@ type (
 	EncoderConfig = zapcore.EncoderConfig
 	// Core is an alias for zapcore.Core
 	Core = zapcore.Core
+	// ObjectMarshaler retains zapcore's object encoding method signature.
+	ObjectMarshaler = zapcore.ObjectMarshaler
+	// ArrayMarshaler retains zapcore's array encoding method signature.
+	ArrayMarshaler = zapcore.ArrayMarshaler
+	// ObjectEncoder exposes the upstream object encoder without changing its method set.
+	ObjectEncoder = zapcore.ObjectEncoder
+	// ArrayEncoder exposes the upstream array encoder without changing its method set.
+	ArrayEncoder = zapcore.ArrayEncoder
 )
 
 // Common log level constants

@@ -49,7 +49,7 @@ zlogger 不去重，也不保證後面的同名 key 一定覆寫前面。
 
 ## 欄位函式說明與範例
 
-以下涵蓋 fields.go 現有的 27 個函式。每個函式都回傳 Field，
+fields.go 現有 47 個函式。下表先列原有的 27 個，後段補充 20 個結構化與切片入口。每個函式都回傳 Field，
 要把結果傳給 Info、With 等入口才會寫入日誌。
 範例中的 readErr、cacheErr、at、endpoint 在下方完整程式中定義。
 表格的 JSON 說明以一般 zap JSON encoder、未啟用自動遮罩為前提。
@@ -209,6 +209,157 @@ func main() {
 未啟用自動遮罩時，最後兩筆的欄位部分分別只剩 message，
 以及 `"tags":[],"missing":null`。
 
+## 結構化欄位與常用切片
+
+以下 20 個入口沿用 zap 同名函式，搭配前表共 47 個欄位函式。
+`profile`、`codes` 的定義見下方完整範例，`at` 沿用前一個範例的時間值。
+Any 原本就能辨識 ObjectMarshaler 與 ArrayMarshaler；新增入口是讓意圖明確，
+不是新增另一套物件編碼機制。
+
+| 函式 | 用途與行為 | 呼叫範例 |
+| --- | --- | --- |
+| `Object` | 以 ObjectMarshaler 編碼巢狀物件，不使用反射。 | `zlogger.Object("profile", profile{"reader"})` |
+| `Array` | 依 ArrayMarshaler 提供的順序編碼陣列。 | `zlogger.Array("items", codes{3, 1})` |
+| `Inline` | 把物件欄位展開至目前層級，不去除重複 key。 | `zlogger.Inline(profile{"inline"})` |
+| `Namespace` | 將後續欄位放入指定子物件。 | `zlogger.Namespace("request")` |
+| `Bools` | bool 切片，維持元素順序。 | `zlogger.Bools("values", []bool{true, false})` |
+| `Ints` | int 切片，維持元素順序。 | `zlogger.Ints("values", []int{-2, 1})` |
+| `Int8s` | int8 切片，維持元素順序。 | `zlogger.Int8s("values", []int8{-2, 1})` |
+| `Int16s` | int16 切片，維持元素順序。 | `zlogger.Int16s("values", []int16{-2, 1})` |
+| `Int32s` | int32 切片，維持元素順序。 | `zlogger.Int32s("values", []int32{-2, 1})` |
+| `Int64s` | int64 切片，維持元素順序。 | `zlogger.Int64s("values", []int64{-2, 1})` |
+| `Uints` | uint 切片，維持元素順序。 | `zlogger.Uints("values", []uint{2, 1})` |
+| `Uint8s` | uint8 數字陣列，與 ByteStrings、Binary 不同。 | `zlogger.Uint8s("values", []uint8{2, 1})` |
+| `Uint16s` | uint16 切片，維持元素順序。 | `zlogger.Uint16s("values", []uint16{2, 1})` |
+| `Uint32s` | uint32 切片，維持元素順序。 | `zlogger.Uint32s("values", []uint32{2, 1})` |
+| `Uint64s` | uint64 切片，維持元素順序。 | `zlogger.Uint64s("values", []uint64{2, 1})` |
+| `Float32s` | float32 切片，維持元素順序。 | `zlogger.Float32s("values", []float32{1.5, -2.25})` |
+| `Float64s` | float64 切片，維持元素順序。 | `zlogger.Float64s("values", []float64{1.5, -2.25})` |
+| `Durations` | 時長切片，單位與格式由 EncodeDuration 決定。 | `zlogger.Durations("values", []time.Duration{time.Second, 1500 * time.Millisecond})` |
+| `Times` | 時間切片，格式由 EncodeTime 決定。 | `zlogger.Times("values", []time.Time{at})` |
+| `ByteStrings` | UTF-8 文字陣列，不是 Base64 或數字陣列。 | `zlogger.ByteStrings("values", [][]byte{[]byte("alpha"), nil, {}})` |
+
+### Marshaler 與 encoder 別名
+
+四個介面使用真正的 Go 型別別名，與 zapcore 的型別相同，不是另建一套介面。
+
+| 別名 | 對應介面與方法 |
+| --- | --- |
+| `ObjectMarshaler` | `zapcore.ObjectMarshaler`；`MarshalLogObject(ObjectEncoder) error` |
+| `ArrayMarshaler` | `zapcore.ArrayMarshaler`；`MarshalLogArray(ArrayEncoder) error` |
+| `ObjectEncoder` | `zapcore.ObjectEncoder`，完整保留 AddString、AddArray、AddObject 等方法 |
+| `ArrayEncoder` | `zapcore.ArrayEncoder`，完整保留 AppendInt、AppendArray、AppendObject 等方法 |
+
+因此，欄位與 marshaler 的呼叫端可以只引用 zlogger。
+這不表示底層已移除 zap；需要自行組裝 core 或選擇 encoder 時，仍可直接使用 zap。
+
+### 求值、nil 與作用範圍
+
+Object、Array、Inline 在建立 Field 時不呼叫 marshaler，核心編碼時才會求值。
+With 可能在綁定欄位時編碼，WithLazy 的求值時機由 zap 控制。
+helper 不複製物件或切片，資料在編碼前須保持穩定，並行存取由呼叫端同步。
+
+新增切片入口在一般 JSON encoder 下，nil 與空切片都輸出 `[]`。
+ByteStrings 的 nil 元素會編成空字串，Uint8s 則保留數字。
+不額外處理 nil marshaler；介面持有 nil 指標的行為由其具體方法與原核心決定，
+不能把切片的 nil 行為套用到 Object、Array 或 Inline。
+
+Namespace 影響其後的欄位，包括衍生 logger 在呼叫時追加的欄位。
+由 With 建立的子 logger 不會污染父 logger。
+Inline 也可能引入同名 key，封裝不會去重或承諾覆寫；下游 JSON parser 可能只留下最後一個值。
+
+### 只引用 zlogger 的完整範例
+
+儲存為 main.go 後執行 `go run .`。程式使用獨立 Instance 寫入暫存檔，
+同步及關閉後印出內容，最後清除自己的暫存目錄，不修改全域 logger。
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/vincent119/zlogger"
+)
+
+type profile struct{ name string }
+
+func (p profile) MarshalLogObject(encoder zlogger.ObjectEncoder) error {
+	encoder.AddString("name", p.name)
+	return encoder.AddArray("codes", codes{2, 1})
+}
+
+type codes []int
+
+func (values codes) MarshalLogArray(encoder zlogger.ArrayEncoder) error {
+	for _, value := range values {
+		encoder.AppendInt(value)
+	}
+	return nil
+}
+
+var (
+	_ zlogger.ObjectMarshaler = profile{}
+	_ zlogger.ArrayMarshaler  = codes{}
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+}
+
+func run() (result error) {
+	directory, err := os.MkdirTemp("", "zlogger-structured-fields-")
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, os.RemoveAll(directory)) }()
+	cfg := zlogger.DefaultConfig()
+	cfg.Format, cfg.Outputs = "json", []string{"file"}
+	cfg.LogPath, cfg.FileName, cfg.AddCaller = directory, "fields.log", false
+	instance, err := zlogger.New(cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, instance.Close()) }()
+	instance.Logger().Info("structured fields",
+		zlogger.Object("profile", profile{"reader"}),
+		zlogger.Array("items", codes{3, 1}),
+		zlogger.Inline(profile{"inline"}),
+		zlogger.Ints("attempts", []int{1, 2}),
+		zlogger.Uint8s("numbers", []uint8{65, 66}),
+		zlogger.ByteStrings("texts", [][]byte{[]byte("AB")}),
+		zlogger.Durations("elapsed", []time.Duration{1500 * time.Millisecond}),
+		zlogger.Times("started_at", []time.Time{time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)}),
+		zlogger.Namespace("request"),
+		zlogger.String("id", "r1"),
+	)
+	if err := instance.Sync(); err != nil {
+		return err
+	}
+	if err := instance.Close(); err != nil {
+		return err
+	}
+	data, err := os.ReadFile(filepath.Join(directory, cfg.FileName))
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Print(string(data))
+	return err
+}
+```
+
+輸出包含初始化與應用程式各一筆日誌，ts 會隨執行時間不同。
+應用程式日誌的 profile 是巢狀物件，items 保留 `[3,1]` 順序，
+name 與 codes 由 Inline 展開至頂層，request.id 位於子物件。
+numbers 是 `[65,66]`，texts 是 `["AB"]`；預設 encoder 下，
+elapsed 為 `["1.5s"]`，started_at 使用時間字串，不由 helper 固定格式。
+
 ## 與遮罩搭配
 
 先建構 `NewRedactingCore`，再綁定 With／WithLazy 或送入 context 欄位。
@@ -216,4 +367,9 @@ func main() {
 
 啟用後按每一層欄位名稱比對，不使用 parent.token 路徑語法。
 Reflect、Stringer、Error 會整欄遮罩，並非只處理命中的 key。
+新增 helper 仍受相同政策約束：命中的 Object／Array 容器不求值，
+命中的 Namespace 抑制整個子樹，Inline 依展開後的欄位檢查。
+編碼錯誤、panic、深度或記錄預算超限時整筆拒絕，不寫出部分資料。
+opaque map／struct 仍依既有整欄政策處理，不因新增 helper 改成逐欄保留。
+marshaler 仍是呼叫端程式碼，包裝不能隔離任意副作用，也不能停止不返回的方法。
 完整用法與失敗行為見[安全性](security.md)。
