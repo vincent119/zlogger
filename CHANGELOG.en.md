@@ -10,10 +10,31 @@ This document records user-visible changes in each zlogger release. Its format f
 
 ## [Unreleased]
 
+There are no recorded changes yet.
+
+## [1.2.0] - 2026-10-16
+
+### Added
+
+- Added `GetSplitCoreWithCleanup` so daily three-file core cleanup returns close errors and supports repeated and concurrent calls.
+- Added `ConfigureCore`, `WithCoreCleanup`, and `ConfigureSplit` to connect custom cores or daily three-file loggers to the global API with explicit synchronization, worker shutdown, and resource ownership.
+- Added `NewSplit` and `Instance.SetLevel` so components can own separate daily three-file loggers and adjust their levels without changing global configuration.
+- Added `NewFailureObserver`, `NewObservedWriteSyncer`, and `WithOutputObserver` to observe write, sync, rotation, and close failures. Notifications use a bounded nonblocking channel, with `Dropped()` counting events lost when full. Core encoding errors are not observed.
+- Added `NewRedactingCore`, `RedactionConfig`, and `ErrRedactionFailed` for explicit construction-time enablement and configurable redaction Keys. Redaction defaults to disabled. When enabled, it handles nested fields, masks opaque values as a whole, and rejects entries that cannot be encoded safely.
+- Added `Object`, `Array`, `Inline`, `Namespace`, 16 typed-slice helpers, and four type aliases: `ObjectMarshaler`, `ArrayMarshaler`, `ObjectEncoder`, and `ArrayEncoder`. There are now 47 field helpers. Applications can implement marshalers using only zlogger imports, while zap remains the underlying dependency.
+
 ### Changed
 
-- Existing Go comments, package-owned errors and diagnostics, and example output now use English. Documentation remains available in Traditional Chinese and English. Caller messages, field values, Unicode test fixtures, and external errors are not translated.
-- Fixed error strings have changed. Use `errors.Is`/`errors.As` rather than matching complete strings. Check existing alerts and string-based tests for compatibility. Error identities, wrapping chains, and APIs are unchanged.
+- Go comments, package-owned errors and diagnostics, and example output now use English. Caller messages, field values, and external errors retain their original text.
+- Expanded both language guides with lifecycle, failure observation, redaction, and all 47 field helpers, including limitations and executable examples.
+
+### Compatibility notes
+
+- Fixed error messages and the daily rotation diagnostic prefix now use English. Use `errors.Is`/`errors.As` instead of matching complete strings, and check existing alerts and string-based tests. Existing error identities, wrapping chains, and API signatures remain unchanged.
+- Redaction does not protect free-text messages. Regular and split logger constructors do not enable it automatically. Original I/O errors and failure event Err values may still contain sensitive information and should not be forwarded without review.
+- New helpers retain zap's evaluation, nil, namespace, and duplicate-key behavior without deep-copying input. Custom core and encoder construction can still require direct zap imports.
+
+The following existing fixed messages changed relative to `v1.1.0`:
 
 | Previous fixed text | New fixed text |
 | --- | --- |
@@ -22,8 +43,11 @@ This document records user-visible changes in each zlogger release. Its format f
 | 日誌檔案路徑不安全 | `unsafe log file path` |
 | 檔案輸出權限無效 | `invalid log file permissions` |
 | 分級 core 設定無效 | `invalid split core configuration` |
-| 日誌遮罩處理失敗 | `log redaction failed` |
 | 每日換檔失敗： | `daily log rotation failed:` |
+
+### Security
+
+- Moved vulnerability scanning to Go 1.26.9 while retaining Go 1.25.12 compatibility tests. The minimum Go version remains 1.25. Updating this package does not upgrade the caller's toolchain.
 
 ## [1.1.0] - 2026-07-31
 
@@ -105,7 +129,8 @@ This document records user-visible changes in each zlogger release. Its format f
 
 <!-- markdownlint-enable MD024 -->
 
-[Unreleased]: https://github.com/vincent119/zlogger/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/vincent119/zlogger/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/vincent119/zlogger/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vincent119/zlogger/compare/v1.0.5...v1.1.0
 [1.0.5]: https://github.com/vincent119/zlogger/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/vincent119/zlogger/compare/v1.0.3...v1.0.4
