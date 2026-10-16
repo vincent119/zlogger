@@ -1,5 +1,10 @@
 # Initialization and Lifecycle
 
+## 遮罩 core 的生命週期
+
+`NewRedactingCore` 不接受任意既有 core，不取得 sink ownership，也不建立 worker。
+可使用 ConfigureCore 與 WithCoreCleanup 沿用原清理契約。參見[生命週期](../zh-TW/lifecycle.md)。
+
 [繁體中文](../zh-TW/lifecycle.md) | **English**
 
 [Documentation index](README.md)

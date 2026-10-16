@@ -13,6 +13,36 @@ import (
 
 var benchmarkContextResult context.Context
 
+func BenchmarkRedaction(b *testing.B) {
+	for _, name := range []string{"disabled", "primitive", "nested", "opaque"} {
+		b.Run(name, func(b *testing.B) {
+			core, err := NewRedactingCore(zapcore.NewJSONEncoder(testEncoderConfig()), zapcore.AddSync(io.Discard), zap.InfoLevel, RedactionConfig{Enabled: name != "disabled", Keys: []string{"token"}})
+			if err != nil {
+				b.Fatal(err)
+			}
+			fields := []zap.Field{zap.String("token", "示範用值"), zap.Int("count", 1)}
+			if name == "nested" {
+				fields = []zap.Field{zap.Object("data", redactionObjectFunc(func(e zapcore.ObjectEncoder) error {
+					e.AddString("token", "示範用值")
+					e.AddInt("count", 1)
+					return nil
+				}))}
+			}
+			if name == "opaque" {
+				fields = []zap.Field{zap.Reflect("data", forbiddenRedactionValue{})}
+			}
+			entry := zapcore.Entry{Level: zap.InfoLevel, Message: "效能測試"}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				if err := core.Write(entry, fields); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkObserver(b *testing.B) {
 	for _, name := range []string{"disabled", "success", "failure_drained", "failure_full"} {
 		b.Run(name, func(b *testing.B) {

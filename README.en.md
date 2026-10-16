@@ -1,5 +1,9 @@
 # zlogger
 
+新增欄位遮罩 API：`NewRedactingCore(encoder, sink, level, cfg)` 搭配
+`RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}`；預設關閉，建構後不可變更。
+完整契約與限制見[安全性](docs/zh-TW/security.md)。
+
 Create `NewFailureObserver(1)` and wrap external sinks with `NewObservedWriteSyncer` to observe
 output failures. Daily split APIs accept `WithOutputObserver(observer)`. Events use a bounded,
 nonblocking channel with a `Dropped()` counter; core encoding errors are not covered.

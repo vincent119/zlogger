@@ -1,5 +1,13 @@
 # 初始化與生命週期
 
+## 遮罩 core 的生命週期
+
+`NewRedactingCore` 接受未綁定欄位的 encoder、sink、level 與 RedactionConfig，
+不接受任意既有 custom core，也不取得 sink ownership。Enabled 預設 false，設定在建構時固定。
+可將回傳 core 傳入 ConfigureCore；其 cleanup 仍負責 Sync，sink Close 仍由原擁有者處理，
+需要時以 WithCoreCleanup 明確登記。B1 觀察層可先包裝 sink，再傳入遮罩建構函式；
+遮罩失敗尚未呼叫 sink，不會產生 Write／Sync 故障事件。
+
 **繁體中文** | [English](../en/lifecycle.md)
 
 [返回文件首頁](README.md)

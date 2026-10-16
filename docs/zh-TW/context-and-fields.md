@@ -1,5 +1,13 @@
 # Context 與 fields
 
+## 自動遮罩與欄位綁定
+
+`NewRedactingCore` 在建構時以 `RedactionConfig.Enabled` 與 `Keys` 固定政策，預設關閉。
+先建構遮罩 core，再呼叫 With／WithLazy、Named、Sugar 或 ConfigureCore；context 合併後
+的 fields 同樣受保護，不改既有欄位順序與重複 key 契約。手動 Redacted 不受開關影響。
+key 依 leaf name 比較，不使用 `parent.token` 路徑語法；opaque 值整欄遮罩。
+保護範圍與失敗行為見[安全性](security.md)。
+
 **繁體中文** | [English](../en/context-and-fields.md)
 
 [返回文件首頁](README.md)
