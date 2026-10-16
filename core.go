@@ -201,6 +201,9 @@ func NewWithOptions(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
+	if settings.observer != nil {
+		return nil, fmt.Errorf("%w: WithOutputObserver 僅支援 split 輸出", ErrInvalidConfig)
+	}
 
 	level := zap.NewAtomicLevelAt(parseLevel(cfg.Level))
 	encoderConfig := buildEncoderConfig(cfg)

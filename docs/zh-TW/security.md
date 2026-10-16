@@ -1,5 +1,13 @@
 # 安全性
 
+## 故障事件的敏感資訊邊界
+
+OutputFailure 不保存日誌本文、fields 或額外完整路徑，Err 也不參與 JSON／YAML 序列化。
+但原始 error 本身仍可能帶有檔案路徑或其他內部資訊；不要直接將 `event.Err`、其字串
+或 `%+v` 格式的整個事件傳到外部告警。observer 是有界的盡力通知，不是可靠事件儲存，
+應監看 Dropped；不能據此宣稱每次故障都已通知。Typed nil sink 不受一般 nil 檢查保證，
+呼叫端須提供有效的 WriteSyncer。
+
 **繁體中文** | [English](../en/security.md)
 
 [返回文件首頁](README.md)

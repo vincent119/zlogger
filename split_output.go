@@ -375,6 +375,7 @@ func (s *SplitOutput) rotateDaily() {
 				if errors.Is(err, os.ErrClosed) {
 					return
 				}
+				s.settings.observer.report("rotate", "split", err)
 				fmt.Fprintf(os.Stderr, "每日換檔失敗：%v\n", err)
 			}
 		}
@@ -382,7 +383,9 @@ func (s *SplitOutput) rotateDaily() {
 }
 
 // Write 依日誌級別寫入對應檔案。
-func (s *SplitOutput) Write(level zapcore.Level, data []byte) (int, error) {
+func (s *SplitOutput) Write(level zapcore.Level, data []byte) (n int, err error) {
+	// defer 後進先出，先釋放輸出鎖再發布事件，避免通知延長臨界區。
+	defer func() { s.settings.observer.report("write", "split", err) }()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -408,7 +411,8 @@ func (s *SplitOutput) Write(level zapcore.Level, data []byte) (int, error) {
 }
 
 // Sync 將所有分級日誌檔同步至儲存裝置。
-func (s *SplitOutput) Sync() error {
+func (s *SplitOutput) Sync() (err error) {
+	defer func() { s.settings.observer.report("sync", "split", err) }()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -418,7 +422,8 @@ func (s *SplitOutput) Sync() error {
 	return s.currentFiles().sync()
 }
 
-func (s *SplitOutput) syncLevel(level zapcore.Level) error {
+func (s *SplitOutput) syncLevel(level zapcore.Level) (err error) {
+	defer func() { s.settings.observer.report("sync", "split", err) }()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -458,6 +463,7 @@ func (s *SplitOutput) Close() error {
 			<-done
 		}
 		s.closeErr = files.close()
+		s.settings.observer.report("close", "split", s.closeErr)
 	})
 	return s.closeErr
 }

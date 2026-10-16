@@ -58,6 +58,24 @@ if err := instance.Sync(); err != nil {
 
 ## 關機順序
 
+FailureObserver 不啟動 goroutine，也不關閉 Events 通道；可共用於多個輸出，不能以
+`range observer.Events()` 等待關閉。長期消費者須使用自己的 context：
+
+```go
+for {
+	select {
+	case <-ctx.Done():
+		return
+	case event := <-observer.Events():
+		// 依 event.Operation 更新健康狀態，避免直接外送原 Err。
+	}
+}
+```
+
+先結束 logger 使用者並執行 Sync／cleanup，再排空需要保留的事件並停止消費者。
+通知不取代原錯誤處理或 zap ErrorOutput。SplitOutput 的通知發生在釋放輸出鎖後；
+並行重複 Close 仍回傳保存的錯誤，但只針對實際 Close 發送一次事件。
+
 `ConfigureCore(patch, core, opts...)` 與 `ConfigureSplit(patch, opts...)` 共用 Configure
 的一次成功 guard，發布 zlogger／zap globals。cleanup 可重複及並行呼叫，恢復先前 globals，
 但不重設成功資格；應先停止所有 logger 使用者。

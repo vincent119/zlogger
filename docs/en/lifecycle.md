@@ -57,6 +57,13 @@ if err := instance.Sync(); err != nil {
 
 ## Shutdown Order
 
+FailureObserver starts no goroutine and never closes Events. Use your own context in a select
+loop, not an unbounded range waiting for channel closure. Stop logger users, run Sync/cleanup,
+drain any required events, then stop the consumer. Shared observers are not owned by logger
+cleanup. Notifications do not replace returned errors or zap ErrorOutput. Split notifications
+run after releasing the output lock; repeated concurrent Close calls report only the one actual
+Close failure while preserving the stored error for every caller.
+
 ConfigureCore and ConfigureSplit share Configure's one-success guard and publish both zlogger
 and zap globals. Their concurrent-safe, idempotent cleanup restores previous globals without
 resetting the guard. Stop all logger users first. ConfigureCore syncs before an explicitly

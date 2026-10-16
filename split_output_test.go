@@ -23,6 +23,133 @@ type recordingWriteSyncCloser struct {
 	syncErr    error
 }
 
+func TestSplitObserverCloseOnce(t *testing.T) {
+	o := newTestObserver(t, 8)
+	want := errors.New("關檔失敗")
+	sink := &recordingWriteSyncCloser{closeErr: want}
+	s := &SplitOutput{infoOut: sink, settings: fileOutputSettings{observer: o}}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if err := s.Close(); !errors.Is(err, want) {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if len(o.Events()) != 1 || (<-o.Events()).Operation != "close" {
+		t.Fatal("一次 Close 應只發一個事件")
+	}
+	_, closes := sink.counts()
+	if closes != 1 {
+		t.Fatal(closes)
+	}
+}
+
+func TestSplitObserverOperations(t *testing.T) {
+	o := newTestObserver(t, 16)
+	want := errors.New("同步失敗")
+	s := &SplitOutput{infoOut: &recordingWriteSyncCloser{syncErr: want}, settings: fileOutputSettings{observer: o}}
+	if err := s.Sync(); !errors.Is(err, want) {
+		t.Fatal(err)
+	}
+	if err := s.syncLevel(zap.InfoLevel); !errors.Is(err, want) {
+		t.Fatal(err)
+	}
+	if err := s.syncLevel(zap.WarnLevel); !errors.Is(err, os.ErrInvalid) {
+		t.Fatal(err)
+	}
+	if _, err := s.Write(zap.ErrorLevel, nil); !errors.Is(err, os.ErrInvalid) {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Write(zap.InfoLevel, nil); !errors.Is(err, os.ErrClosed) {
+		t.Fatal(err)
+	}
+	if err := s.Sync(); !errors.Is(err, os.ErrClosed) {
+		t.Fatal(err)
+	}
+	if err := s.syncLevel(zap.InfoLevel); !errors.Is(err, os.ErrClosed) {
+		t.Fatal(err)
+	}
+	if len(o.Events()) != 7 {
+		t.Fatalf("事件數=%d", len(o.Events()))
+	}
+	for range 7 {
+		if event := <-o.Events(); event.Output != "split" {
+			t.Fatal(event)
+		}
+	}
+}
+
+func TestSplitObserverWriteFailure(t *testing.T) {
+	o := newTestObserver(t, 1)
+	want := errors.New("磁碟寫入失敗")
+	s := &SplitOutput{infoOut: failingObserverSink{writeErr: want}, settings: fileOutputSettings{observer: o}}
+	if n, err := s.Write(zap.InfoLevel, []byte("私有本文")); n != 0 || !errors.Is(err, want) {
+		t.Fatalf("Write=(%d,%v)", n, err)
+	}
+	event := <-o.Events()
+	if event.Operation != "write" || event.Output != "split" || !errors.Is(event.Err, want) {
+		t.Fatal(event)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSplitObserverRotationFailure(t *testing.T) {
+	o := newTestObserver(t, 1)
+	now := time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC)
+	clock := newManualRotationClock(now)
+	want := errors.New("開啟新日誌失敗")
+	calls := 0
+	opener := func(directory, prefix, date string, _ os.FileMode) (splitFileSet, error) {
+		calls++
+		if calls > 1 {
+			return splitFileSet{}, want
+		}
+		return openSplitFiles(directory, prefix, date)
+	}
+	settings, err := resolveFileOutputOptions(WithOutputObserver(o))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := newSplitOutputWithSettings(t.TempDir(), "app", clock, opener, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	timer := clock.nextTimer(t)
+	clock.setNow(now.AddDate(0, 0, 1))
+	timer.fire(clock.Now())
+	select {
+	case event := <-o.Events():
+		if event.Operation != "rotate" || !errors.Is(event.Err, want) {
+			t.Fatal(event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("等待 rotation 事件逾時")
+	}
+	if _, err := s.Write(zap.InfoLevel, []byte("舊檔仍可用")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.done:
+	default:
+		t.Fatal("worker 未停止")
+	}
+}
+
 func TestGetSplitCoreWithCleanupConcurrent(t *testing.T) {
 	core, cleanup, err := GetSplitCoreWithCleanup(t.TempDir(), "app", zap.NewProductionEncoderConfig())
 	if err != nil {
