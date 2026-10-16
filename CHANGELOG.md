@@ -10,10 +10,31 @@
 
 ## [未發布]
 
+目前沒有已記錄的變更。
+
+## [1.2.0] - 2026-10-16
+
+### 新增
+
+- 新增 `GetSplitCoreWithCleanup`，讓每日三檔 core 的 cleanup 回傳關檔錯誤，並支援重複與並行清理。
+- 新增 `ConfigureCore`、`WithCoreCleanup` 與 `ConfigureSplit`，將自訂 core 或每日三檔 logger 接上全域 API，明確管理同步、換檔 worker 與資源所有權。
+- 新增 `NewSplit` 與 `Instance.SetLevel`，讓不同元件各自持有每日三檔 logger，獨立調整級別且不修改全域設定。
+- 新增 `NewFailureObserver`、`NewObservedWriteSyncer` 與 `WithOutputObserver`，觀察寫入、同步、換檔及關檔失敗。通知採有界非阻塞通道，滿載時以 `Dropped()` 累計丟棄事件；不涵蓋 core 編碼錯誤。
+- 新增 `NewRedactingCore`、`RedactionConfig` 與 `ErrRedactionFailed`，支援建構時明確啟用及指定遮罩 Keys。預設關閉；啟用後處理巢狀欄位，opaque 值整欄遮罩，無法安全編碼時拒絕整筆輸出。
+- 新增 `Object`、`Array`、`Inline`、`Namespace`、16 個常用切片入口，以及 `ObjectMarshaler`、`ArrayMarshaler`、`ObjectEncoder`、`ArrayEncoder` 四個型別別名。欄位 helper 共 47 個，呼叫端可只引用 zlogger 實作 marshaler，底層仍使用 zap。
+
 ### 變更
 
-- 既有 Go 註解、套件固定錯誤與診斷、範例顯示文字統一使用英文，中英文說明文件維持雙語。使用者訊息、欄位值、Unicode 測試資料與外部錯誤不翻譯。
-- 固定錯誤字串屬可觀察變更。請以 `errors.Is`／`errors.As` 判斷錯誤，避免依賴完整字串；既有告警與字串比對測試需自行確認。錯誤身分、包裝鏈與 API 不變。
+- Go 註解、套件固定錯誤與診斷、範例顯示文字統一使用英文。呼叫端傳入的訊息、欄位值與外部錯誤仍保留原文。
+- 中英文文件補齊生命週期、故障通知、遮罩，以及全部 47 個欄位 helper 的用途、限制與可執行範例。
+
+### 相容性注意事項
+
+- 固定錯誤字串與每日換檔診斷前綴改為英文。請以 `errors.Is`／`errors.As` 判斷錯誤，避免依賴完整字串；既有告警與字串比對測試需自行確認。既有錯誤身分、包裝鏈與 API 簽名不變。
+- 遮罩不處理自由文字 message，一般 logger 與 split 建構入口也不會自動啟用遮罩。原始 I/O error 與故障事件的 Err 仍可能含敏感資料，不宜直接外送。
+- 新增 helper 沿用 zap 的求值、nil、namespace 與重複 key 行為，不深層複製輸入。自訂 core／encoder 的建構仍可能需要直接引用 zap。
+
+下表列出相較 `v1.1.0` 的既有固定文字變更：
 
 | 原固定文字 | 新固定文字 |
 | --- | --- |
@@ -22,8 +43,11 @@
 | 日誌檔案路徑不安全 | `unsafe log file path` |
 | 檔案輸出權限無效 | `invalid log file permissions` |
 | 分級 core 設定無效 | `invalid split core configuration` |
-| 日誌遮罩處理失敗 | `log redaction failed` |
 | 每日換檔失敗： | `daily log rotation failed:` |
+
+### 安全性
+
+- 安全掃描工具鏈改用 Go 1.26.9，Go 1.25.12 保留於相容性測試。最低 Go 版本仍為 1.25；套件更新不會替呼叫端升級工具鏈。
 
 ## [1.1.0] - 2026-07-31
 
@@ -105,7 +129,8 @@
 
 <!-- markdownlint-enable MD024 -->
 
-[未發布]: https://github.com/vincent119/zlogger/compare/v1.1.0...HEAD
+[未發布]: https://github.com/vincent119/zlogger/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/vincent119/zlogger/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vincent119/zlogger/compare/v1.0.5...v1.1.0
 [1.0.5]: https://github.com/vincent119/zlogger/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/vincent119/zlogger/compare/v1.0.3...v1.0.4
