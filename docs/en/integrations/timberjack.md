@@ -1,17 +1,18 @@
 # timberjack Integration
 
-[繁體中文](../../zh-TW/integrations/timberjack.md) | **English**
+[繁體中文（台灣）](../../zh-TW/integrations/timberjack.md) | **English**
 
 [Documentation index](../README.md)
 
-The examples are verified with `github.com/DeRuina/timberjack` v1.4.5:
+The examples use `github.com/DeRuina/timberjack` v1.4.5. Install it in your application's module:
 
 ```bash
 go get github.com/DeRuina/timberjack@v1.4.5
 ```
 
-`SplitOutput` provides daily rotation. timberjack provides size limits, backup counts, retention,
-and gzip or zstd compression. Do not let both components manage the same file.
+SplitOutput handles daily rotation. For size limits, backup counts, or compression, let
+timberjack own the files and pass its sinks to a core. Don't let both components manage the same file.
+timberjack isn't a built-in zlogger dependency.
 
 ## Single-File Rotation
 
@@ -45,8 +46,8 @@ func main() {
 }
 ```
 
-This is an independent `*zap.Logger`. Even `zap.ReplaceGlobals(logger)` replaces only `zap.L()`;
-it does not configure zlogger's own global logger.
+This creates an independent `*zap.Logger`. Calling `zap.ReplaceGlobals(logger)` changes zap's
+global logger, but zlogger.Info won't use it. Use ConfigureCore below for zlogger's global API.
 
 ## Three-File Rotation
 
@@ -89,6 +90,28 @@ func main() {
 }
 ```
 
-Each file should have one writing process. Use distinct names or an external log collector in
-multi-process environments. `NewSplitCore` never closes external sinks; the caller syncs first and
-then closes them.
+Give each file one writing process. For multiple processes, use different filenames or an
+external log collector. NewSplitCore leaves sinks open, so the caller must sync and close them.
+These assembly examples discard cleanup errors. Report or join those errors in production code.
+
+## Connect the core to zlogger globals
+
+Once you have the three-sink core, replace zap.New and its cleanup defer with this fragment,
+import errors alongside the existing packages, and put the code in a function that returns error.
+
+```go
+closeSinks := func() error {
+	return errors.Join(infoSink.Close(), warnSink.Close(), errorSink.Close())
+}
+cleanup, err := zlogger.ConfigureCore(nil, core, zlogger.WithCoreCleanup(closeSinks))
+if err != nil {
+	return errors.Join(err, closeSinks())
+}
+defer func() { _ = cleanup() }()
+zlogger.Info("service started")
+```
+
+Successful configuration takes responsibility for the callback.
+Cleanup syncs before closing sinks. Remove the earlier close defer.
+For Write/Sync failures, wrap each sink before building NewSplitCore.
+See [output modes](../output-modes.md).

@@ -1,171 +1,146 @@
 # zlogger
 
-需要觀察輸出故障時，建立 `NewFailureObserver(1)`，並以 `NewObservedWriteSyncer` 包裝
-外部 sink；每日 split 使用 `WithOutputObserver(observer)`。事件以有界通道非阻塞發送，
-滿載可由 `Dropped()` 查詢；不涵蓋 core 編碼錯誤。詳見[輸出模式](docs/zh-TW/output-modes.md)。
+zlogger 是以 [zap](https://github.com/uber-go/zap) 為基礎的 Go 結構化日誌套件。
+可以使用全域 logger，也可以讓各元件持有自己的 Instance。內建一般檔案輸出、
+每日三檔、輸出故障通知，以及需自行啟用的敏感欄位遮罩。
 
-每日 core 需要回傳關閉錯誤時使用 `GetSplitCoreWithCleanup`；獨立每日 logger 使用
-`NewSplit`，全域每日 logger 使用 `ConfigureSplit`，自訂 core 全域設定使用 `ConfigureCore`。
-新 global cleanup 與 split Instance.Close 自動 Sync，再關閉自有資源；外部資源僅執行
-`WithCoreCleanup` 明確登記的清理。欄位與 ownership 詳見[生命週期](docs/zh-TW/lifecycle.md)。
-
-[![GitHub](https://img.shields.io/badge/github-vincent119/zlogger-blue?logo=github)](https://github.com/vincent119/zlogger)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
 [![CI](https://github.com/vincent119/zlogger/actions/workflows/ci.yml/badge.svg)](https://github.com/vincent119/zlogger/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/vincent119/zlogger/branch/main/graph/badge.svg)](https://codecov.io/gh/vincent119/zlogger)
-[![Go Report Card](https://goreportcard.com/badge/github.com/vincent119/zlogger)](https://goreportcard.com/report/github.com/vincent119/zlogger)
+[![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **繁體中文** | [English](README.en.md)
 
-基於 [zap](https://github.com/uber-go/zap) 的結構化日誌 library，提供可處理錯誤的
-初始化、明確資源生命週期、context fields、安全檔案輸出，以及每日或自訂分級輸出。
-
-## 架構概覽
-
-```mermaid
-flowchart LR
-    subgraph Input[設定來源]
-        Files["YAML / JSON / TOML / ENV"] --> Decoder["呼叫端 decoder"] --> Patch[ConfigPatch]
-        Config["Config / DefaultConfig"]
-    end
-    subgraph Standard[標準 logger]
-        Configure["Configure / ConfigureWithOptions"] --> Global["global API"] --> Core["zap core"]
-        New["New / NewWithOptions"] --> Instance[Instance] --> Core
-        Core --> Console[console]
-        Core --> File["單一 file"]
-    end
-    subgraph Split[分級輸出]
-        GetSplit[GetSplitCore] --> Daily["SplitOutput 每日三檔"]
-        Custom["NewSplitCore + SplitSinks"] --> External["外部 sinks"]
-    end
-    Patch --> Configure
-    Config --> New
-    App[應用程式] --> GetSplit
-    App --> Custom
-```
-
-標準 `outputs` 只建立 console 或單一 file。每日三檔使用 `GetSplitCore`；容量、保留與
-壓縮 rotation 使用 `NewSplitCore` 接外部 sink，ownership 仍屬呼叫端。
-
 ## 安裝
 
-需要 Go 1.25 或更新版本。
+需要 Go 1.25 以上版本。
 
 ```bash
 go get github.com/vincent119/zlogger
 ```
 
-## 快速開始
+本文件對應目前分支的原始碼，發布版本不一定已包含所有 API。
+若安裝的版本找不到新介面，請先確認該版本是否包含對應功能，再選擇版本或 commit。
+
+## 先寫一筆日誌
+
+以下範例使用預設的終端機輸出。初始化成功後會看到「服務啟動」與 `component=api` 欄位。
 
 ```go
 package main
 
 import (
-	"log"
+	"fmt"
+	"os"
 
 	"github.com/vincent119/zlogger"
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cleanup, err := zlogger.Configure(nil)
 	if err != nil {
-		log.Fatalf("初始化 logger 失敗：%v", err)
+		return err
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
-			log.Printf("關閉 logger 失敗：%v", err)
+			fmt.Fprintln(os.Stderr, "關閉 logger 失敗：", err)
 		}
 	}()
 
 	zlogger.Info("服務啟動", zlogger.String("component", "api"))
 	if err := zlogger.Sync(); err != nil {
-		log.Printf("同步 logger 失敗：%v", err)
+		fmt.Fprintln(os.Stderr, "同步 logger 失敗：", err)
 	}
+	return nil
 }
 ```
 
-`Configure` 在同一 process 只能成功一次；cleanup 可重複呼叫，但不允許再次成功
-Configure。不需要 global 狀態時，使用 `New`／`NewWithOptions` 持有 `Instance`。
+`Configure` 只允許在同一個程序中成功一次。清理後也不能重新設定。
+不需要全域狀態時，改用 `New` 或 `NewSplit`。
 
-## 核心選擇
+某些終端機或管線不支援對標準輸出執行 Sync，可能回傳系統錯誤。
+範例會印出該錯誤，但不因此中止程式。檔案輸出的同步錯誤應依應用程式的可靠性需求處理。
 
-### 初始化
+## 該選哪個入口？
 
-| 需求 | 入口 | 資源責任 |
+| 你要做的事 | 入口 | 關閉方式 |
 | --- | --- | --- |
-| global logger | `Configure`／`ConfigureWithOptions` | 執行 cleanup |
-| instance logger | `New`／`NewWithOptions` | `Instance.Close` |
-| 舊版相容 | `Init` | deprecated；失敗可能 panic |
+| 設定全域的終端機／單檔輸出 | `Configure`、`ConfigureWithOptions` | 先 `Sync`，再執行 cleanup |
+| 建立獨立的終端機／單檔 logger | `New`、`NewWithOptions` | 先 `Instance.Sync`，再 `Instance.Close` |
+| 設定全域的每日三檔 | `ConfigureSplit` | cleanup 自動同步、停止換檔並關檔 |
+| 建立獨立的每日三檔 logger | `NewSplit` | `Instance.Close` 自動同步、停止換檔並關檔 |
+| 自行組裝每日 core，取得關閉錯誤 | `GetSplitCoreWithCleanup` | 先同步 logger，再執行 cleanup |
+| 把自訂 core 接到全域 API | `ConfigureCore` | cleanup 先同步，再執行登記的 `WithCoreCleanup` |
+| 把三個外部 sink 依級別分流 | `NewSplitCore` | 呼叫端同步並關閉各 sink |
 
-### 設定
+每日三檔依序接收 DEBUG／INFO、WARN、ERROR 以上的日誌。
+`Config.Outputs=["file"]` 只會建立一般單檔，不會自動改成每日三檔。
+舊 `GetSplitCore` 回傳的 `func()` 不會回傳關閉錯誤，新程式可選 `GetSplitCoreWithCleanup`。
 
-新程式使用 `ConfigPatch` 區分未提供與明確零值。zlogger 不讀取設定檔或環境變數；
-外部 decoder 負責嚴格解析，再由 zlogger 套用預設值與驗證。
+自訂 core 也能直接交給 `zap.New(core)`，完全不設定全域狀態。
+目前沒有接受任意 custom core 的非全域 Instance 建構入口。
 
-| key | 預設值 | 摘要 |
-| --- | --- | --- |
-| `level` | `info` | debug、info、warn、error、fatal |
-| `format` | `console` | console、json |
-| `outputs` | `[console]` | console、file，不得重複 |
-| `log_path` | `./logs` | file output 的 base directory |
-| `file_name` | 空字串 | 安全 leaf；空值使用日期 |
-| `add_caller` | `true` | caller 資訊 |
-| `add_stacktrace` | `false` | ERROR 以上 stacktrace |
-| `development` | `false` | zap development mode |
-| `color_enabled` | `true` | 只影響 console；JSON 無 ANSI |
+## 輸出故障與敏感資料
 
-### 輸出
+`NewFailureObserver(capacity)` 可接收輸出失敗事件。外部 sink 使用
+`NewObservedWriteSyncer`，每日 split 則使用 `WithOutputObserver`。
+通道滿載時會丟棄新事件並累計 `Dropped()`，不會等候事件消費者。
+它不保證每次故障都能送達，也不涵蓋 core 編碼錯誤。
 
-| 需求 | 入口 | ownership |
-| --- | --- | --- |
-| console／單檔 | `Configure`／`New` | cleanup／Instance |
-| 每日 info、warn、error | `GetSplitCore`／`SplitOutput` | cleanup／呼叫端 Close |
-| 自訂三路 sink | `NewSplitCore`／`SplitSinks` | 呼叫端管理 sinks |
-| 容量與壓縮 | timberjack + `NewSplitCore` | 呼叫端管理 sinks |
+遮罩要自行開啟。`NewRedactingCore(encoder, sink, level, cfg)` 搭配
+`RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}`，
+可在欄位送往 sink 前套用規則。設定在建構時固定，無法執行中切換。
+message 自由文字不會被遮罩，Reflect、Stringer、Error 則會整欄遮罩，減少可用的診斷細節。
 
-## 完整文件
+一般 `New`／`Configure` 與每日 split 建構入口不會自動套用遮罩。
+用法及限制分別見[輸出模式](docs/zh-TW/output-modes.md)與[安全性](docs/zh-TW/security.md)。
 
-| 主題 | 說明 |
+## 設定與欄位由誰決定？
+
+`ConfigPatch` 可區分「沒提供」和明確設定 `false`。
+zlogger 不讀設定檔或環境變數，解析方式及來源優先順序由應用程式決定。
+
+日誌欄位也一樣。你可以用 `With` 綁定固定欄位，或用 `WithContext` 傳遞請求欄位。
+現有 `WithRequestID`、`WithTraceID` 等 helper 是便利入口，不強制所有服務採用相同名稱，
+也不會自動從 OpenTelemetry 擷取追蹤資訊。
+
+## 詳細文件
+
+| 你想了解的事 | 文件 |
 | --- | --- |
-| [設定](docs/zh-TW/configuration.md) | loader 邊界、九個欄位、驗證與顏色 |
-| [生命週期](docs/zh-TW/lifecycle.md) | global、instance、cleanup、Sync、Close |
-| [輸出模式](docs/zh-TW/output-modes.md) | 單檔、每日分級、自訂 sinks 與 routing |
-| [Context 與 fields](docs/zh-TW/context-and-fields.md) | request fields、複製與合併規則 |
-| [安全性](docs/zh-TW/security.md) | safe leaf、`os.Root`、permissions、敏感資料 |
-| [Gin 整合](docs/zh-TW/integrations/gin.md) | 引用端 middleware 範例 |
-| [timberjack 整合](docs/zh-TW/integrations/timberjack.md) | 容量、保留、壓縮與三檔 rotation |
-| [變更紀錄](CHANGELOG.md) | 各版本新增、變更、修正與相容性注意事項 |
+| 預設值、ConfigPatch、設定檔載入邊界 | [設定](docs/zh-TW/configuration.md) |
+| 全域與獨立 logger、Sync、Close、清理責任 | [生命週期](docs/zh-TW/lifecycle.md) |
+| 每日三檔、自訂 sink、故障事件 | [輸出模式](docs/zh-TW/output-modes.md) |
+| 自訂欄位、context、重複 key 與複製行為 | [Context 與欄位](docs/zh-TW/context-and-fields.md) |
+| 遮罩範例、檔案路徑與權限限制 | [安全性](docs/zh-TW/security.md) |
+| 在應用端接入 HTTP 請求日誌 | [Gin 整合](docs/zh-TW/integrations/gin.md) |
+| 依容量換檔、保留與壓縮 | [timberjack 整合](docs/zh-TW/integrations/timberjack.md) |
 
-[開啟繁體中文文件首頁](docs/zh-TW/README.md) | [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger)
+[文件首頁](docs/zh-TW/README.md) · [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger) ·
+[設計說明](DESIGN.md) · [變更紀錄](CHANGELOG.md)
 
-## API 導覽
+## 開發與驗證
 
-| 類別 | API |
-| --- | --- |
-| 初始化 | `Configure`、`ConfigureWithOptions`、`New`、`NewWithOptions` |
-| global 日誌 | `Debug`、`Info`、`Warn`、`Error`、`Fatal`、`SetLevel` |
-| context | `WithContext`、`FromContext`、`WithRequestID`、`WithTraceID`、`WithOperation`、`WithComponent` |
-| 分級輸出 | `GetSplitCore`、`NewSplitOutput`、`NewSplitCore`、`SplitSinks` |
-| 敏感欄位 | `Redacted`、`NewRedactingCore`、`RedactionConfig` |
-
-自動遮罩預設關閉。`NewRedactingCore(encoder, sink, level, cfg)` 以
-`RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}` 明確啟用，
-再透過 `ConfigureCore` 設為 global logger。設定在建構時固定，不支援執行中切換。
-自由文字 message 不受保護；完整限制見[安全性](docs/zh-TW/security.md)。
-
-主要 sentinel errors：`ErrInvalidConfig`、`ErrAlreadyConfigured`、`ErrUnsafeLogPath`、
-`ErrInvalidFilePermission`、`ErrInvalidSplitCore`、`ErrRedactionFailed` 與 `os.ErrClosed`。使用 `errors.Is` 判斷。
-
-## 開發與品質驗證
+在 repository 根目錄執行：
 
 ```bash
+make help
 make verify
 ```
 
-CI 使用 Go 1.25.12 與 Go 1.26.9 執行 race test，使用 Go 1.26.9 執行 vulnerability scan，並在 Linux、
-macOS 15、Windows 2025 驗證相容性。coverage 門檻為 90%，結果上傳 Codecov。
+`make verify` 會執行格式、vet、lint、race、90% 覆蓋率檢查與 logger 效能冒煙測試。
+另用 `make vuln` 掃描可達漏洞。工具版本以 Makefile 為準。
 
-## License
+CI 的 race 測試使用 Go 1.25.12、1.26.9，相容性工作涵蓋 Linux、macOS 15 與 Windows 2025。
+這些是測試環境，不代表所有作業系統都有相同的檔案權限行為。
 
-MIT
+## 授權
+
+[MIT](LICENSE)

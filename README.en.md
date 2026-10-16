@@ -1,174 +1,153 @@
 # zlogger
 
-新增欄位遮罩 API：`NewRedactingCore(encoder, sink, level, cfg)` 搭配
-`RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}`；預設關閉，建構後不可變更。
-完整契約與限制見[安全性](docs/zh-TW/security.md)。
+zlogger is a Go structured logging package built on [zap](https://github.com/uber-go/zap).
+Use a global logger or give each component its own Instance. It supports regular file output,
+three daily files, output-failure notifications, and field redaction that you enable explicitly.
 
-Create `NewFailureObserver(1)` and wrap external sinks with `NewObservedWriteSyncer` to observe
-output failures. Daily split APIs accept `WithOutputObserver(observer)`. Events use a bounded,
-nonblocking channel with a `Dropped()` counter; core encoding errors are not covered.
-See [Output Modes](docs/en/output-modes.md).
-
-Use GetSplitCoreWithCleanup for daily cores with Close error propagation, NewSplit for independent
-daily instances, ConfigureSplit for daily globals, and ConfigureCore for custom globals. New
-global cleanup and split Instance.Close sync before closing owned resources. External cleanup
-requires explicit WithCoreCleanup registration. See [Lifecycle](docs/en/lifecycle.md).
-
-[![GitHub](https://img.shields.io/badge/github-vincent119/zlogger-blue?logo=github)](https://github.com/vincent119/zlogger)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
 [![CI](https://github.com/vincent119/zlogger/actions/workflows/ci.yml/badge.svg)](https://github.com/vincent119/zlogger/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/vincent119/zlogger/branch/main/graph/badge.svg)](https://codecov.io/gh/vincent119/zlogger)
-[![Go Report Card](https://goreportcard.com/badge/github.com/vincent119/zlogger)](https://goreportcard.com/report/github.com/vincent119/zlogger)
+[![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [繁體中文](README.md) | **English**
 
-A structured logging library based on [zap](https://github.com/uber-go/zap). It provides
-error-aware initialization, explicit resource lifecycles, context fields, secure file output,
-and daily or custom level-based routing.
+## Install
 
-## Architecture Overview
-
-```mermaid
-flowchart LR
-    subgraph Input[Configuration sources]
-        Files["YAML / JSON / TOML / ENV"] --> Decoder["Caller-owned decoder"] --> Patch[ConfigPatch]
-        Config["Config / DefaultConfig"]
-    end
-    subgraph Standard[Standard logger]
-        Configure["Configure / ConfigureWithOptions"] --> Global["global API"] --> Core["zap core"]
-        New["New / NewWithOptions"] --> Instance[Instance] --> Core
-        Core --> Console[console]
-        Core --> File["single file"]
-    end
-    subgraph Split[Level-based output]
-        GetSplit[GetSplitCore] --> Daily["SplitOutput: three daily files"]
-        Custom["NewSplitCore + SplitSinks"] --> External["external sinks"]
-    end
-    Patch --> Configure
-    Config --> New
-    App[Application] --> GetSplit
-    App --> Custom
-```
-
-Standard `outputs` create only console or one file. Use `GetSplitCore` for three daily files and
-`NewSplitCore` with external sinks for size, retention, and compression rotation. The caller retains
-sink ownership.
-
-## Installation
-
-Go 1.25 or later is required.
+Requires Go 1.25 or later.
 
 ```bash
 go get github.com/vincent119/zlogger
 ```
 
-## Quick Start
+These docs follow the source on this branch. A published release may have fewer APIs.
+If your installed version lacks an API shown here, check which version or commit includes it
+before updating your dependency.
+
+## Write your first log
+
+This example uses the default console output. After initialization, you'll see
+`service started` with a `component=api` field.
 
 ```go
 package main
 
 import (
-	"log"
+	"fmt"
+	"os"
 
 	"github.com/vincent119/zlogger"
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cleanup, err := zlogger.Configure(nil)
 	if err != nil {
-		log.Fatalf("initialize logger: %v", err)
+		return err
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
-			log.Printf("close logger: %v", err)
+			fmt.Fprintln(os.Stderr, "close logger:", err)
 		}
 	}()
 
 	zlogger.Info("service started", zlogger.String("component", "api"))
 	if err := zlogger.Sync(); err != nil {
-		log.Printf("sync logger: %v", err)
+		fmt.Fprintln(os.Stderr, "sync logger:", err)
 	}
+	return nil
 }
 ```
 
-`Configure` can succeed only once in a process. Cleanup is idempotent but does not permit another
-successful Configure call. Use `New` or `NewWithOptions` to hold an `Instance` without global state.
+`Configure` can succeed once per process. Cleanup doesn't reset that limit.
+Use `New` or `NewSplit` when you don't need globals.
 
-## Core Choices
+Some terminals and pipes don't support Sync on stdout and return an operating-system error.
+This example reports it without exiting. Handle file-output sync failures according to your
+application's reliability requirements.
 
-### Initialization
+## Choose an entry point
 
-| Requirement | Entry point | Resource responsibility |
+| What you need | Entry point | How to close it |
 | --- | --- | --- |
-| Global logger | `Configure` / `ConfigureWithOptions` | Run cleanup |
-| Instance logger | `New` / `NewWithOptions` | `Instance.Close` |
-| Legacy compatibility | `Init` | Deprecated; may panic |
+| Global console or single-file output | `Configure`, `ConfigureWithOptions` | Call `Sync`, then cleanup |
+| Independent console or single-file logger | `New`, `NewWithOptions` | Call `Instance.Sync`, then `Instance.Close` |
+| Global daily files | `ConfigureSplit` | Cleanup syncs, stops rotation, and closes files |
+| Independent daily logger | `NewSplit` | `Instance.Close` syncs, stops rotation, and closes files |
+| A daily core with close errors | `GetSplitCoreWithCleanup` | Sync the logger, then call cleanup |
+| A custom core behind the global API | `ConfigureCore` | Cleanup syncs, then runs the registered `WithCoreCleanup` |
+| Three external sinks routed by level | `NewSplitCore` | The caller syncs and closes each sink |
 
-### Configuration
+Daily routing sends DEBUG/INFO, WARN, and ERROR or higher to separate files.
+`Config.Outputs=["file"]` creates a regular single file, not daily split output.
+The older `GetSplitCore` returns a `func()` that discards close errors.
+Use `GetSplitCoreWithCleanup` when you need those errors.
 
-New applications use `ConfigPatch` to distinguish omitted values from explicit zero values. zlogger
-does not read configuration files or environment variables. An external decoder parses strictly,
-then zlogger applies defaults and validation.
+You can also pass a custom core straight to `zap.New(core)` without touching globals.
+There is no non-global Instance constructor that accepts an arbitrary custom core.
 
-| Key | Default | Summary |
-| --- | --- | --- |
-| `level` | `info` | debug, info, warn, error, fatal |
-| `format` | `console` | console, json |
-| `outputs` | `[console]` | console, file; no duplicates |
-| `log_path` | `./logs` | Base directory for file output |
-| `file_name` | empty | Safe leaf; empty uses the date |
-| `add_caller` | `true` | Caller information |
-| `add_stacktrace` | `false` | Stack traces at ERROR and above |
-| `development` | `false` | zap development mode |
-| `color_enabled` | `true` | Console only; JSON has no ANSI |
+## Output failures and sensitive data
 
-### Output
+`NewFailureObserver(capacity)` receives output-failure events. Wrap an external sink with
+`NewObservedWriteSyncer`, or pass `WithOutputObserver` to a daily split constructor.
+A full channel drops new events and increments `Dropped()` rather than blocking the write.
+Delivery is best-effort. Core encoding errors aren't covered.
 
-| Requirement | Entry point | Ownership |
-| --- | --- | --- |
-| Console / one file | `Configure` / `New` | Cleanup / Instance |
-| Daily info, warn, error | `GetSplitCore` / `SplitOutput` | Cleanup / caller Close |
-| Three custom sinks | `NewSplitCore` / `SplitSinks` | Caller manages sinks |
-| Size and compression | timberjack + `NewSplitCore` | Caller manages sinks |
+Redaction is off by default. Build a core with `NewRedactingCore(encoder, sink, level, cfg)`
+and `RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}`.
+The policy is fixed at construction. Free-text messages stay unchanged.
+Reflect, Stringer, and Error values are fully masked, which removes some diagnostic detail.
 
-## Complete Documentation
+Regular `New`/`Configure` and daily split constructors don't enable redaction for you.
+See [output modes](docs/en/output-modes.md) and [security](docs/en/security.md) for setup and limits.
 
-| Topic | Description |
+## You choose configuration sources and field names
+
+`ConfigPatch` distinguishes an omitted setting from an explicit `false`.
+Your application loads configuration files or environment variables and decides which source
+takes precedence, then zlogger fills defaults and validates the resulting configuration.
+
+Field names are yours too.
+Use `With` for fixed fields and `WithContext` for request fields.
+Helpers such as `WithRequestID` and `WithTraceID` are conveniences, not a required schema.
+zlogger doesn't extract OpenTelemetry context automatically.
+
+## Read more
+
+| What you need | Guide |
 | --- | --- |
-| [Configuration](docs/en/configuration.md) | Loader boundary, nine fields, validation, and color |
-| [Lifecycle](docs/en/lifecycle.md) | Globals, instances, cleanup, Sync, and Close |
-| [Output modes](docs/en/output-modes.md) | Single file, daily routing, custom sinks, and levels |
-| [Context and fields](docs/en/context-and-fields.md) | Request fields, copies, and merge rules |
-| [Security](docs/en/security.md) | Safe leaves, `os.Root`, permissions, and sensitive data |
-| [Gin integration](docs/en/integrations/gin.md) | Caller-owned middleware example |
-| [timberjack integration](docs/en/integrations/timberjack.md) | Size, retention, compression, and three-file rotation |
-| [Changelog](CHANGELOG.en.md) | Additions, changes, fixes, and compatibility notes by release |
+| Defaults, ConfigPatch, and loading configuration | [Configuration](docs/en/configuration.md) |
+| Globals, independent loggers, Sync, Close, and ownership | [Lifecycle](docs/en/lifecycle.md) |
+| Daily files, custom sinks, and failure events | [Output modes](docs/en/output-modes.md) |
+| Custom fields, context, duplicate keys, and copies | [Context and fields](docs/en/context-and-fields.md) |
+| Redaction examples, paths, and file permissions | [Security](docs/en/security.md) |
+| HTTP request logging in your application | [Gin integration](docs/en/integrations/gin.md) |
+| Size-based rotation, retention, and compression | [timberjack integration](docs/en/integrations/timberjack.md) |
 
-[Open the English documentation index](docs/en/README.md) | [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger)
+[Documentation index](docs/en/README.md) · [GoDoc](https://pkg.go.dev/github.com/vincent119/zlogger) ·
+[Design notes (Chinese)](DESIGN.md) · [Changelog](CHANGELOG.en.md)
 
-## API Guide
+## Develop and verify
 
-| Category | API |
-| --- | --- |
-| Initialization | `Configure`, `ConfigureWithOptions`, `New`, `NewWithOptions` |
-| Global logging | `Debug`, `Info`, `Warn`, `Error`, `Fatal`, `SetLevel` |
-| Context | `WithContext`, `FromContext`, `WithRequestID`, `WithTraceID`, `WithOperation`, `WithComponent` |
-| Split output | `GetSplitCore`, `NewSplitOutput`, `NewSplitCore`, `SplitSinks` |
-
-Primary sentinel errors are `ErrInvalidConfig`, `ErrAlreadyConfigured`, `ErrUnsafeLogPath`,
-`ErrInvalidFilePermission`, `ErrInvalidSplitCore`, and `os.ErrClosed`. Use `errors.Is`.
-
-## Development and Verification
+Run these from the repository root:
 
 ```bash
+make help
 make verify
 ```
 
-CI runs race tests with Go 1.25.12 and Go 1.26.9, and vulnerability scans with Go 1.26.9. Compatibility is
-verified on Linux, macOS 15, and Windows 2025. The coverage threshold is 90%, and results are
-uploaded to Codecov.
+`make verify` runs formatting, vet, lint, race tests, the 90% coverage gate, and logger benchmark
+smoke tests. Run `make vuln` separately for reachable vulnerabilities.
+The Makefile pins tool versions.
+
+CI runs race tests on Go 1.25.12 and 1.26.9, with compatibility jobs for Linux, macOS 15,
+and Windows 2025. File-permission behavior still depends on the operating system.
 
 ## License
 
-MIT
+[MIT](LICENSE)

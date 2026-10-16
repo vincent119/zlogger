@@ -1,11 +1,14 @@
 # Gin 整合
 
-**繁體中文** | [English](../../en/integrations/gin.md)
+**繁體中文（台灣）** | [English](../../en/integrations/gin.md)
 
 [返回文件首頁](../README.md)
 
-此 middleware 是引用端程式，不屬於 zlogger package。zlogger 不依賴 Gin；時間格式與
-UTC 由 encoder 管理，不在 middleware 重複設定。
+把這份 middleware 放進自己的應用程式，並先設定 zlogger 全域 logger。
+zlogger 本身不依賴 Gin，也沒有內建這些函式。時間格式交給 encoder，middleware 只計算耗時。
+
+method、path、status、category 都是範例選的名稱，可以依團隊規範修改。
+這裡使用全域 InfoContext／ErrorContext，不會自動改用獨立 Instance。
 
 ## Middleware
 
@@ -89,15 +92,15 @@ func Logger(conf Zconfig) gin.HandlerFunc {
 		}
 
 		if len(c.Errors) > 0 {
-			zlogger.ErrorContext(ctx, "HTTP request failed", fields...)
+			zlogger.ErrorContext(ctx, "HTTP 請求處理失敗", fields...)
 			return
 		}
-		zlogger.InfoContext(ctx, "HTTP request", fields...)
+		zlogger.InfoContext(ctx, "HTTP 請求", fields...)
 	}
 }
 ```
 
-## Handler 用法
+## 在 handler 加入欄位
 
 ```go
 middleware.SetLogFields(c, zlogger.String("user_id", "12345"))
@@ -107,5 +110,10 @@ zlogger.InfoContext(c.Request.Context(), "處理 callback")
 middleware.SkipMiddlewareLog(c)
 ```
 
-`SkipMiddlewareLog` 只在 handler 已自行記錄完整事件時使用。request ID 範例沿用上游
-`X-Request-ID`；若服務需自行產生 ID，應由應用程式注入產生器。
+handler 已自行記錄完整事件時，才呼叫 `SkipMiddlewareLog`，避免重複記錄。
+這個範例直接沿用 X-Request-ID。正式服務應在可信任邊界檢查長度、格式與來源，
+需要自行產生 ID 時由應用程式提供產生器。
+
+範例不記錄 request body、完整 headers 或 query string，也不自動啟用遮罩。
+若路徑本身含有個資，請在應用端改用路由樣板或其他不含敏感資料的表示方式。
+ctx 在進入 handler 前擷取，handler 若另建 request context，這段 middleware 不會自動重新讀取。

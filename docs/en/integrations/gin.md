@@ -1,11 +1,15 @@
 # Gin Integration
 
-[繁體中文](../../zh-TW/integrations/gin.md) | **English**
+[繁體中文（台灣）](../../zh-TW/integrations/gin.md) | **English**
 
 [Documentation index](../README.md)
 
-This middleware is caller-owned code and is not part of the zlogger package. zlogger does not
-depend on Gin. Time formatting and UTC remain encoder concerns and are not configured again here.
+Put this middleware in your application and configure the zlogger global logger first.
+These functions belong to your application. zlogger doesn't depend on Gin.
+The encoder handles timestamps. The middleware measures elapsed time.
+
+Names such as method, path, status, and category are choices made by this example.
+Change them to fit your team. InfoContext and ErrorContext use the global logger, not an Instance.
 
 ## Middleware
 
@@ -97,7 +101,7 @@ func Logger(conf Zconfig) gin.HandlerFunc {
 }
 ```
 
-## Handler Usage
+## Add fields from a handler
 
 ```go
 middleware.SetLogFields(c, zlogger.String("user_id", "12345"))
@@ -107,5 +111,12 @@ zlogger.InfoContext(c.Request.Context(), "process callback")
 middleware.SkipMiddlewareLog(c)
 ```
 
-Use `SkipMiddlewareLog` only after the handler has written a complete event. The request ID example
-reuses an upstream `X-Request-ID`. Applications that generate IDs should inject their own generator.
+Call `SkipMiddlewareLog` after the handler has already recorded the event to avoid duplicate logs.
+This example reuses X-Request-ID directly. If that header can come from an untrusted client,
+validate its length, format, and source before using it as a request identifier in your logs.
+Generate IDs in your application when needed.
+
+The example logs no request body, complete headers, or query string, and doesn't enable redaction.
+If a URL path contains personal data, use a route template or another safe representation instead.
+The middleware captures ctx before the handler runs. It doesn't reread a request context replaced
+by the handler.

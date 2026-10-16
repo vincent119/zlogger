@@ -1,18 +1,23 @@
 # Configuration
 
-[繁體中文](../zh-TW/configuration.md) | **English**
+[繁體中文（台灣）](../zh-TW/configuration.md) | **English**
 
 [Documentation index](README.md)
 
-## Configuration Model
+## Use ConfigPatch for partial overrides
 
-New applications should use `ConfigPatch`. Every field is a pointer: nil means omitted, while a
-non-nil pointer is an explicit override, including `false`, an empty string, or an empty slice.
-`Resolve` fills omitted fields from `DefaultConfig`, copies `outputs`, normalizes level, format, and
-outputs to lowercase, and then validates the result.
+Start with `ConfigPatch`. Each field is a pointer.
+Nil means omitted. A non-nil pointer supplies the value, including false, an empty string,
+or an empty slice, so you can turn a feature off without accidentally asking for its default.
 
-`Config` represents a complete runtime configuration. `Config.Merge` is deprecated because bool
-fields cannot distinguish an omitted value from `false`.
+`Resolve` fills missing values from `DefaultConfig`, copies outputs, lowercases level,
+format, and outputs, then validates the result.
+
+`Config` holds a complete configuration. Start with `DefaultConfig()` and edit what you need.
+The older `Config.Merge` is deprecated because its bool fields can't distinguish omission from false.
+
+This fragment selects debug-level JSON and enables console and file output.
+Once you have cleanup, call Sync before cleanup during shutdown. See [lifecycle](lifecycle.md).
 
 ```go
 level := "debug"
@@ -28,15 +33,15 @@ cleanup, err := zlogger.Configure(&zlogger.ConfigPatch{
 })
 ```
 
-## Configuration Source Responsibility
+## Load configuration in your application
 
-zlogger does not read YAML, JSON, TOML, or environment variables and does not define source
-precedence. The caller decodes external data into `ConfigPatch`; zlogger only resolves, normalizes,
-validates, and initializes the logger.
+Load settings in your application. Choose the source order there too.
+Then pass the decoded `ConfigPatch` to zlogger.
+It fills defaults, validates settings, and builds the logger.
 
-`ConfigPatch` provides `json`, `yaml`, `toml`, and `mapstructure` tags, but no built-in loader.
-Unknown keys must be rejected by the decoder's strict mode. Once ignored, `Validate` cannot recover
-them.
+`ConfigPatch` has json, yaml, toml, and mapstructure tags for your chosen decoder.
+Enable strict decoding to reject unknown keys. Validate can't recover a typo that the decoder
+has already discarded.
 
 ```yaml
 log:
@@ -51,7 +56,9 @@ log:
   color_enabled: false
 ```
 
-This standard-library JSON loader limits input size and rejects unknown fields:
+This standard-library JSON fragment reads at most 1 MiB and rejects unknown fields.
+It doesn't fully validate file size or trailing data, so add those checks if your input requires them.
+Place it inside a function returning error and import encoding/json, fmt, io, os, and zlogger.
 
 ```go
 type AppConfig struct {
@@ -78,28 +85,31 @@ if err != nil {
 defer func() { _ = cleanup() }()
 ```
 
-## Field Contract
+## Defaults and accepted values
 
 | Key | Type | Default | Allowed values or conditions |
 | --- | --- | --- | --- |
-| `level` | string | `info` | `debug`, `info`, `warn`, `error`, `fatal`; case-insensitive |
-| `format` | string | `console` | `console`, `json`; case-insensitive |
-| `outputs` | []string | `[console]` | `console`, `file`; at least one and unique |
+| `level` | string | `info` | `debug`, `info`, `warn`, `error`, `fatal` (case-insensitive) |
+| `format` | string | `console` | `console`, `json` (case-insensitive) |
+| `outputs` | []string | `[console]` | One or both of `console`, `file`, with no duplicates |
 | `log_path` | string | `./logs` | Non-empty when `file` is enabled |
-| `file_name` | string | empty | Safe leaf name; empty uses the date |
+| `file_name` | string | empty | Single safe filename. Empty uses the date |
 | `add_caller` | bool | `true` | Add caller information |
 | `add_stacktrace` | bool | `false` | Add stack traces at ERROR and above |
 | `development` | bool | `false` | zap development mode |
 | `color_enabled` | bool | `true` | Emit ANSI colors only for console format |
 
-Invalid values satisfy `errors.Is(err, zlogger.ErrInvalidConfig)`. An unsafe `file_name` with file
-output retains both `ErrInvalidConfig` and `ErrUnsafeLogPath`. Decoder and file I/O errors are not
-wrapped as `ErrInvalidConfig`.
+Check invalid settings with `errors.Is(err, zlogger.ErrInvalidConfig)`.
+With file output enabled, an unsafe file_name also preserves `ErrUnsafeLogPath`.
+Decoder failures and file I/O errors keep their own error types.
 
-## Color Contract
+## Colors affect console format only
 
 ANSI colors are emitted only when `format=console` and `color_enabled=true`. JSON levels never
 contain ANSI, even when `color_enabled` remains true.
 
 File creation permissions are not configuration-file fields. See [Security](security.md) and
 `ConfigureWithOptions`.
+
+`RedactionConfig` is separate. Pass it to `NewRedactingCore`, not ConfigPatch.
+See the [security example](security.md) to enable redaction.
