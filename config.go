@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// ErrInvalidConfig 表示 logger 設定不符合公開契約。
-var ErrInvalidConfig = errors.New("logger 設定無效")
+// ErrInvalidConfig indicates that logger settings violate the public contract.
+var ErrInvalidConfig = errors.New("invalid logger configuration")
 
-// Config 是 logger 完整執行期設定。
+// Config contains the complete runtime logger settings.
 //
-// Config 保留既有欄位型別以維持來源碼相容。需要表達「未提供」與明確零值時，
-// 應改用 ConfigPatch.Resolve 建立完整設定。
+// Existing field types are retained for source compatibility. To distinguish omitted
+// values from explicit zero values, resolve a ConfigPatch instead.
 type Config struct {
 	Level         string   `json:"level" yaml:"level" toml:"level" mapstructure:"level"`
 	Format        string   `json:"format" yaml:"format" toml:"format" mapstructure:"format"`
@@ -26,7 +26,7 @@ type Config struct {
 	ColorEnabled  bool     `json:"color_enabled" yaml:"color_enabled" toml:"color_enabled" mapstructure:"color_enabled"`
 }
 
-// ConfigPatch 表示可區分未提供與明確零值的部分設定。
+// ConfigPatch distinguishes omitted settings from explicit zero values.
 type ConfigPatch struct {
 	Level         *string   `json:"level,omitempty" yaml:"level,omitempty" toml:"level,omitempty" mapstructure:"level"`
 	Format        *string   `json:"format,omitempty" yaml:"format,omitempty" toml:"format,omitempty" mapstructure:"format"`
@@ -39,7 +39,7 @@ type ConfigPatch struct {
 	ColorEnabled  *bool     `json:"color_enabled,omitempty" yaml:"color_enabled,omitempty" toml:"color_enabled,omitempty" mapstructure:"color_enabled"`
 }
 
-// DefaultConfig 回傳可直接使用的完整預設設定。
+// DefaultConfig returns a complete, usable default configuration.
 func DefaultConfig() *Config {
 	return &Config{
 		Level:         "info",
@@ -53,7 +53,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Resolve 將部分設定套用至預設值，並回傳獨立且已驗證的完整設定。
+// Resolve applies a patch to defaults and returns an independent, validated configuration.
 func (p *ConfigPatch) Resolve() (*Config, error) {
 	cfg := DefaultConfig()
 	if p == nil {
@@ -96,27 +96,27 @@ func (p *ConfigPatch) Resolve() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate 檢查完整設定，不修改呼叫端提供的物件。
-// file output 的 FileName 必須是安全 leaf name。
+// Validate checks a complete configuration without modifying the caller's object.
+// File output requires FileName to be a safe leaf name.
 func (c *Config) Validate() error {
 	if c == nil {
-		return fmt.Errorf("%w: Config 不可為 nil", ErrInvalidConfig)
+		return fmt.Errorf("%w: Config must not be nil", ErrInvalidConfig)
 	}
 
 	switch strings.ToLower(c.Level) {
 	case "debug", "info", "warn", "error", "fatal":
 	default:
-		return fmt.Errorf("%w: Level %q 不受支援", ErrInvalidConfig, c.Level)
+		return fmt.Errorf("%w: unsupported Level %q", ErrInvalidConfig, c.Level)
 	}
 
 	switch strings.ToLower(c.Format) {
 	case "console", "json":
 	default:
-		return fmt.Errorf("%w: Format %q 不受支援", ErrInvalidConfig, c.Format)
+		return fmt.Errorf("%w: unsupported Format %q", ErrInvalidConfig, c.Format)
 	}
 
 	if len(c.Outputs) == 0 {
-		return fmt.Errorf("%w: Outputs 不可為空", ErrInvalidConfig)
+		return fmt.Errorf("%w: Outputs must not be empty", ErrInvalidConfig)
 	}
 
 	seen := make(map[string]struct{}, len(c.Outputs))
@@ -128,16 +128,16 @@ func (c *Config) Validate() error {
 		case "file":
 			fileEnabled = true
 		default:
-			return fmt.Errorf("%w: Output %q 不受支援", ErrInvalidConfig, output)
+			return fmt.Errorf("%w: unsupported Output %q", ErrInvalidConfig, output)
 		}
 		if _, exists := seen[normalized]; exists {
-			return fmt.Errorf("%w: Output %q 重複", ErrInvalidConfig, output)
+			return fmt.Errorf("%w: duplicate Output %q", ErrInvalidConfig, output)
 		}
 		seen[normalized] = struct{}{}
 	}
 
 	if fileEnabled && c.LogPath == "" {
-		return fmt.Errorf("%w: file output 的 LogPath 不可為空", ErrInvalidConfig)
+		return fmt.Errorf("%w: file output requires a nonempty LogPath", ErrInvalidConfig)
 	}
 	if fileEnabled {
 		if err := validateLogLeaf(c.FileName, true); err != nil {
@@ -148,9 +148,9 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Merge 保留既有的部分合併行為以維持來源碼相容。
+// Merge retains legacy partial-merge behavior for source compatibility.
 //
-// Deprecated: Config 的 bool 無法區分未提供與明確 false，新程式應使用
+// Deprecated: Config booleans cannot distinguish omitted values from explicit false. Use
 // ConfigPatch.Resolve。
 func (c *Config) Merge(other *Config) *Config {
 	if other == nil {

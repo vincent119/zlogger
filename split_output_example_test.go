@@ -30,15 +30,15 @@ func ExampleGetSplitCoreWithCleanup() {
 		panic(err)
 	}
 	logger := zap.New(core)
-	logger.Info("服務啟動")
+	logger.Info("service started")
 	if err := logger.Sync(); err != nil {
 		panic(err)
 	}
 	if err := cleanup(); err != nil {
 		panic(err)
 	}
-	fmt.Println("已同步並關閉")
-	// Output: 已同步並關閉
+	fmt.Println("synced and closed")
+	// Output: synced and closed
 }
 
 func ExampleNewSplit() {
@@ -57,12 +57,12 @@ func ExampleNewSplit() {
 	if err != nil {
 		panic(err)
 	}
-	instance.Logger().Info("獨立日誌")
+	instance.Logger().Info("independent logger")
 	if err := instance.Close(); err != nil {
 		panic(err)
 	}
-	fmt.Println("Instance 已同步並關閉")
-	// Output: Instance 已同步並關閉
+	fmt.Println("instance synced and closed")
+	// Output: instance synced and closed
 }
 
 func ExampleInstance_SetLevel() {
@@ -79,7 +79,7 @@ func ExampleInstance_SetLevel() {
 		panic(err)
 	}
 	fmt.Println(instance.Logger().Core().Enabled(zlogger.DebugLevel))
-	// 未設定 Output，避免預設 console 初始化訊息造成不穩定輸出。
+	// No Output is specified because the default console initialization message would make output unstable.
 }
 
 func ExampleConfigureCore() {
@@ -89,13 +89,13 @@ func ExampleConfigureCore() {
 	if err != nil {
 		panic(err)
 	}
-	zlogger.Info("服務啟動")
+	zlogger.Info("service started")
 	if err := cleanup(); err != nil {
 		panic(err)
 	}
-	// buffer 屬於呼叫端；只有明確 WithCoreCleanup 登記的 callback 才會執行。
+	// The buffer belongs to the caller. Only an explicitly registered WithCoreCleanup callback runs.
 	fmt.Print(buffer.String())
-	// 未設定 Output，避免範例測試消耗 process 中只能成功一次的 global 設定資格。
+	// No Output is specified to avoid consuming the process-wide one-time global configuration.
 }
 
 func ExampleConfigureSplit() {
@@ -112,11 +112,11 @@ func ExampleConfigureSplit() {
 	if err != nil {
 		panic(err)
 	}
-	zlogger.Info("服務啟動")
+	zlogger.Info("service started")
 	if err := cleanup(); err != nil {
 		panic(err)
 	}
-	// cleanup 自動 Sync 並停止 worker；本範例只編譯，不消耗 global 設定資格。
+	// Cleanup syncs and stops the worker. This example is compiled without consuming global configuration.
 }
 
 func (*exampleSplitSink) Sync() error {
@@ -152,7 +152,7 @@ func ExampleNewSplitCore() {
 		panic(err)
 	}
 
-	// sink 由呼叫端建立，因此也由呼叫端在 logger 停止使用後關閉。
+	// The caller creates and owns the sink, and must close it after the logger is no longer in use.
 	defer func() {
 		_ = infoSink.Close()
 		_ = warnSink.Close()

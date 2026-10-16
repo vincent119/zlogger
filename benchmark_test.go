@@ -187,7 +187,7 @@ func BenchmarkLoggerSplitOutputWrite(b *testing.B) {
 		for b.Loop() {
 			written, err := output.Write(zapcore.InfoLevel, payload)
 			if err != nil || written != len(payload) {
-				b.Fatalf("SplitOutput.Write 寫入結果 = (%d, %v)，預期 (%d, nil)", written, err, len(payload))
+				b.Fatalf("SplitOutput.Write = (%d, %v), want (%d, nil)", written, err, len(payload))
 			}
 		}
 	})
@@ -201,7 +201,7 @@ func BenchmarkLoggerSplitOutputWrite(b *testing.B) {
 			for pb.Next() {
 				written, err := output.Write(zapcore.InfoLevel, payload)
 				if err != nil || written != len(payload) {
-					b.Errorf("SplitOutput.Write 寫入結果 = (%d, %v)，預期 (%d, nil)", written, err, len(payload))
+					b.Errorf("SplitOutput.Write = (%d, %v), want (%d, nil)", written, err, len(payload))
 					return
 				}
 			}
@@ -224,7 +224,7 @@ func BenchmarkLoggerSplitOutputWrite(b *testing.B) {
 			for pb.Next() {
 				written, err := output.Write(levels[index%len(levels)], payload)
 				if err != nil || written != len(payload) {
-					b.Errorf("SplitOutput.Write 寫入結果 = (%d, %v)，預期 (%d, nil)", written, err, len(payload))
+					b.Errorf("SplitOutput.Write = (%d, %v), want (%d, nil)", written, err, len(payload))
 					return
 				}
 				index++

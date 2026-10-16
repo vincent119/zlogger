@@ -9,33 +9,33 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// ErrRedactionFailed 表示無法安全處理整筆日誌；錯誤不包含原值或 marshaler 錯誤。
-var ErrRedactionFailed = errors.New("日誌遮罩處理失敗")
+// ErrRedactionFailed indicates that an entry cannot be processed safely. It contains no original values or marshaler errors.
+var ErrRedactionFailed = errors.New("log redaction failed")
 
-// RedactionConfig 在建構時決定遮罩政策，預設不啟用，建構後修改不影響既有 core。
+// RedactionConfig sets the construction-time policy. It defaults to disabled. Later changes do not affect existing cores.
 type RedactionConfig struct {
 	Enabled bool     `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
 	Keys    []string `json:"keys" yaml:"keys" mapstructure:"keys"`
 }
 
-// NewRedactingCore 建立自有 core，避免在 With 求值後才攔截敏感欄位。
-// encoder 必須尚未綁定欄位；sink、level 與 encoder 的既有並行責任不變。
-// 停用時忽略 Keys，回傳一般 zapcore.NewCore；啟用時 Keys 須為 1 至 128 個非空 key。
-// 不接管 sink 關閉，不保護自由文字 message；opaque 值在啟用時整欄遮罩。
+// NewRedactingCore creates a core that intercepts sensitive fields before With evaluates them.
+// The encoder must have no bound fields. Existing encoder, sink, and level concurrency requirements still apply.
+// When disabled, Keys is ignored and zapcore.NewCore is returned. When enabled, Keys requires 1 to 128 nonempty keys.
+// Sink ownership remains with the caller. Free-text messages are not protected. Opaque values are fully masked when enabled.
 func NewRedactingCore(encoder zapcore.Encoder, sink zapcore.WriteSyncer, level zapcore.LevelEnabler, cfg RedactionConfig) (zapcore.Core, error) {
 	if encoder == nil || sink == nil || level == nil {
-		return nil, fmt.Errorf("%w: encoder、sink 與 level 不可為 nil", ErrInvalidConfig)
+		return nil, fmt.Errorf("%w: encoder, sink, and level must not be nil", ErrInvalidConfig)
 	}
 	if !cfg.Enabled {
 		return zapcore.NewCore(encoder, sink, level), nil
 	}
 	if len(cfg.Keys) == 0 || len(cfg.Keys) > 128 {
-		return nil, fmt.Errorf("%w: 遮罩 key 數量須為 1 至 128", ErrInvalidConfig)
+		return nil, fmt.Errorf("%w: redaction requires 1 to 128 keys", ErrInvalidConfig)
 	}
 	keys := make(map[string]struct{}, len(cfg.Keys))
 	for _, key := range cfg.Keys {
 		if len(key) == 0 || len(key) > 128 {
-			return nil, fmt.Errorf("%w: 遮罩 key 長度須為 1 至 128 bytes", ErrInvalidConfig)
+			return nil, fmt.Errorf("%w: redaction key length must be between 1 and 128 bytes", ErrInvalidConfig)
 		}
 		keys[redactionKey(key)] = struct{}{}
 	}
@@ -133,7 +133,7 @@ func (r *redactionObject) addFields(fields []zapcore.Field) {
 }
 
 func (r *redactionObject) addField(field zapcore.Field) {
-	// 使用者 marshaler 或無效 Field 不得透過 panic／原 error 洩漏值。
+	// User marshalers and invalid fields must not leak values through panics or original errors.
 	defer func() {
 		if recover() != nil {
 			r.state.err = ErrRedactionFailed

@@ -16,7 +16,7 @@ ctx = zlogger.WithContext(ctx,
 	zlogger.String("tenant", "example"),
 	zlogger.String("job", "import"),
 )
-zlogger.InfoContext(ctx, "開始匯入", zlogger.Int("batch_size", 100))
+zlogger.InfoContext(ctx, "start import", zlogger.Int("batch_size", 100))
 ```
 
 固定的元件欄位也可以用 `zlogger.With(fields...)` 綁在衍生 logger。
@@ -122,7 +122,7 @@ skip 使用非負整數。實際第一個框架也受 zlogger 或應用端包裝
 已有 logger 且只在 DEBUG 開啟時需要堆疊，可以先檢查：
 
 ```go
-if entry := logger.Check(zap.DebugLevel, "診斷資訊"); entry != nil {
+if entry := logger.Check(zap.DebugLevel, "diagnostic details"); entry != nil {
 	entry.Write(zlogger.Stack("stack"))
 }
 ```
@@ -160,12 +160,12 @@ func main() {
 		EncodeDuration: zapcore.StringDurationEncoder,
 	})
 	logger := zap.New(zapcore.NewCore(encoder, zapcore.AddSync(&output), zap.DebugLevel))
-	readErr := errors.New("讀取失敗")
-	cacheErr := errors.New("快取未命中")
+	readErr := errors.New("read failed")
+	cacheErr := errors.New("cache miss")
 	at := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
 	endpoint := &url.URL{Scheme: "https", Host: "example.com"}
 
-	logger.Info("欄位範例",
+	logger.Info("field examples",
 		zlogger.String("status", "ready"),
 		zlogger.Strings("tags", []string{"api", "worker"}),
 		zlogger.Int("attempt", 2),
@@ -194,8 +194,8 @@ func main() {
 		zlogger.StackSkip("caller_stack", 1),
 		zlogger.Redacted("authorization"),
 	)
-	logger.Info("沒有錯誤", zlogger.Err(nil), zlogger.NamedError("cache_error", nil))
-	logger.Info("空值", zlogger.Strings("tags", nil), zlogger.Any("missing", nil))
+	logger.Info("no error", zlogger.Err(nil), zlogger.NamedError("cache_error", nil))
+	logger.Info("empty values", zlogger.Strings("tags", nil), zlogger.Any("missing", nil))
 
 	if err := logger.Sync(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

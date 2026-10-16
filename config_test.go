@@ -161,17 +161,17 @@ func TestConfigPatchResolvePreservesDefaults(t *testing.T) {
 
 	cfg, err := patch.Resolve()
 	if err != nil {
-		t.Fatalf("解析部分設定失敗：%v", err)
+		t.Fatalf("resolve configuration patch: %v", err)
 	}
 
 	if cfg.Level != "debug" {
-		t.Errorf("Level = %q，預期為 debug", cfg.Level)
+		t.Errorf("Level = %q, want debug", cfg.Level)
 	}
 	if !cfg.AddCaller {
-		t.Error("未提供 AddCaller 時應保留預設 true")
+		t.Error("omitted AddCaller must retain the default true")
 	}
 	if !cfg.ColorEnabled {
-		t.Error("未提供 ColorEnabled 時應保留預設 true")
+		t.Error("omitted ColorEnabled must retain the default true")
 	}
 }
 
@@ -184,14 +184,14 @@ func TestConfigPatchResolveExplicitFalse(t *testing.T) {
 
 	cfg, err := patch.Resolve()
 	if err != nil {
-		t.Fatalf("解析部分設定失敗：%v", err)
+		t.Fatalf("resolve configuration patch: %v", err)
 	}
 
 	if cfg.AddCaller {
-		t.Error("明確提供 AddCaller=false 時不應保留預設值")
+		t.Error("explicit AddCaller=false must override the default")
 	}
 	if cfg.ColorEnabled {
-		t.Error("明確提供 ColorEnabled=false 時不應保留預設值")
+		t.Error("explicit ColorEnabled=false must override the default")
 	}
 }
 
@@ -201,17 +201,17 @@ func TestConfigPatchResolveCopiesOutputs(t *testing.T) {
 
 	cfg, err := patch.Resolve()
 	if err != nil {
-		t.Fatalf("解析部分設定失敗：%v", err)
+		t.Fatalf("resolve configuration patch: %v", err)
 	}
 
 	outputs[0] = "changed-source"
 	if cfg.Outputs[0] != "console" {
-		t.Fatalf("結果與來源共享 slice：%v", cfg.Outputs)
+		t.Fatalf("result shares the source slice: %v", cfg.Outputs)
 	}
 
 	cfg.Outputs[1] = "changed-result"
 	if (*patch.Outputs)[1] != "FILE" {
-		t.Fatalf("來源與結果共享 slice：%v", *patch.Outputs)
+		t.Fatalf("source shares the result slice: %v", *patch.Outputs)
 	}
 }
 
@@ -221,10 +221,10 @@ func TestConfigPatchResolveUsesDefaultLogPathWhenOmitted(t *testing.T) {
 
 	cfg, err := patch.Resolve()
 	if err != nil {
-		t.Fatalf("解析部分設定失敗：%v", err)
+		t.Fatalf("resolve configuration patch: %v", err)
 	}
 	if cfg.LogPath != "./logs" {
-		t.Errorf("LogPath = %q，預期為 ./logs", cfg.LogPath)
+		t.Errorf("LogPath = %q, want ./logs", cfg.LogPath)
 	}
 }
 
@@ -234,27 +234,27 @@ func TestConfigValidateRejectsInvalidValues(t *testing.T) {
 		cfg  *Config
 	}{
 		{
-			name: "未知 Level",
+			name: "unknown Level",
 			cfg:  &Config{Level: "trace", Format: "console", Outputs: []string{"console"}, LogPath: "./logs"},
 		},
 		{
-			name: "未知 Format",
+			name: "unknown Format",
 			cfg:  &Config{Level: "info", Format: "xml", Outputs: []string{"console"}, LogPath: "./logs"},
 		},
 		{
-			name: "空 Outputs",
+			name: "empty Outputs",
 			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{}, LogPath: "./logs"},
 		},
 		{
-			name: "未知 Output",
+			name: "unknown Output",
 			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{"stderr"}, LogPath: "./logs"},
 		},
 		{
-			name: "重複 Output",
+			name: "duplicate Output",
 			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{"console", "console"}, LogPath: "./logs"},
 		},
 		{
-			name: "file 的 LogPath 空白",
+			name: "empty LogPath for file output",
 			cfg:  &Config{Level: "info", Format: "console", Outputs: []string{"file"}, LogPath: ""},
 		},
 	}
@@ -263,7 +263,7 @@ func TestConfigValidateRejectsInvalidValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.cfg.Validate()
 			if !errors.Is(err, ErrInvalidConfig) {
-				t.Fatalf("錯誤 = %v，預期可由 errors.Is 判斷為 ErrInvalidConfig", err)
+				t.Fatalf("error = %v, want errors.Is ErrInvalidConfig", err)
 			}
 		})
 	}
@@ -276,7 +276,7 @@ func TestConfigPatchResolveRejectsExplicitEmptyLogPath(t *testing.T) {
 
 	_, err := patch.Resolve()
 	if !errors.Is(err, ErrInvalidConfig) {
-		t.Fatalf("錯誤 = %v，預期可由 errors.Is 判斷為 ErrInvalidConfig", err)
+		t.Fatalf("error = %v, want errors.Is ErrInvalidConfig", err)
 	}
 }
 
@@ -304,10 +304,10 @@ func TestConfigValidateRejectsUnsafeFileName(t *testing.T) {
 			}
 			err := cfg.Validate()
 			if !errors.Is(err, ErrInvalidConfig) {
-				t.Fatalf("錯誤 = %v，預期 ErrInvalidConfig", err)
+				t.Fatalf("error = %v, want ErrInvalidConfig", err)
 			}
 			if !errors.Is(err, ErrUnsafeLogPath) {
-				t.Fatalf("錯誤 = %v，預期 ErrUnsafeLogPath", err)
+				t.Fatalf("error = %v, want ErrUnsafeLogPath", err)
 			}
 		})
 	}
@@ -320,6 +320,6 @@ func TestConfigValidateRejectsUnsafeFileName(t *testing.T) {
 		FileName: "../unused.log",
 	}
 	if err := consoleOnly.Validate(); err != nil {
-		t.Fatalf("console-only Config 不應驗證未使用的 FileName：%v", err)
+		t.Fatalf("console-only Config must not validate unused FileName: %v", err)
 	}
 }

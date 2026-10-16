@@ -10,7 +10,20 @@
 
 ## [未發布]
 
-目前沒有已記錄的變更。
+### 變更
+
+- 既有 Go 註解、套件固定錯誤與診斷、範例顯示文字統一使用英文，中英文說明文件維持雙語。使用者訊息、欄位值、Unicode 測試資料與外部錯誤不翻譯。
+- 固定錯誤字串屬可觀察變更。請以 `errors.Is`／`errors.As` 判斷錯誤，避免依賴完整字串；既有告警與字串比對測試需自行確認。錯誤身分、包裝鏈與 API 不變。
+
+| 原固定文字 | 新固定文字 |
+| --- | --- |
+| logger 設定無效 | `invalid logger configuration` |
+| 全域 logger 已完成設定 | `global logger is already configured` |
+| 日誌檔案路徑不安全 | `unsafe log file path` |
+| 檔案輸出權限無效 | `invalid log file permissions` |
+| 分級 core 設定無效 | `invalid split core configuration` |
+| 日誌遮罩處理失敗 | `log redaction failed` |
+| 每日換檔失敗： | `daily log rotation failed:` |
 
 ## [1.1.0] - 2026-07-31
 

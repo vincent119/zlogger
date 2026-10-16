@@ -13,7 +13,7 @@ func String(key, value string) Field {
 	return zap.String(key, value)
 }
 
-// Redacted 建立固定遮罩值的字串欄位，且不接收原始秘密值。
+// Redacted creates a string field with a fixed replacement without accepting the original secret.
 func Redacted(key string) Field {
 	return zap.String(key, "[REDACTED]")
 }

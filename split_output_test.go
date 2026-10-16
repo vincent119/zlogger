@@ -25,7 +25,7 @@ type recordingWriteSyncCloser struct {
 
 func TestSplitObserverCloseOnce(t *testing.T) {
 	o := newTestObserver(t, 8)
-	want := errors.New("關檔失敗")
+	want := errors.New("file close failed")
 	sink := &recordingWriteSyncCloser{closeErr: want}
 	s := &SplitOutput{infoOut: sink, settings: fileOutputSettings{observer: o}}
 	var wg sync.WaitGroup
@@ -38,7 +38,7 @@ func TestSplitObserverCloseOnce(t *testing.T) {
 	}
 	wg.Wait()
 	if len(o.Events()) != 1 || (<-o.Events()).Operation != "close" {
-		t.Fatal("一次 Close 應只發一個事件")
+		t.Fatal("Close must emit only one event")
 	}
 	_, closes := sink.counts()
 	if closes != 1 {
@@ -48,7 +48,7 @@ func TestSplitObserverCloseOnce(t *testing.T) {
 
 func TestSplitObserverOperations(t *testing.T) {
 	o := newTestObserver(t, 16)
-	want := errors.New("同步失敗")
+	want := errors.New("sync failed")
 	s := &SplitOutput{infoOut: &recordingWriteSyncCloser{syncErr: want}, settings: fileOutputSettings{observer: o}}
 	if err := s.Sync(); !errors.Is(err, want) {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestSplitObserverOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(o.Events()) != 7 {
-		t.Fatalf("事件數=%d", len(o.Events()))
+		t.Fatalf("event count=%d", len(o.Events()))
 	}
 	for range 7 {
 		if event := <-o.Events(); event.Output != "split" {
@@ -86,9 +86,9 @@ func TestSplitObserverOperations(t *testing.T) {
 
 func TestSplitObserverWriteFailure(t *testing.T) {
 	o := newTestObserver(t, 1)
-	want := errors.New("磁碟寫入失敗")
+	want := errors.New("disk write failed")
 	s := &SplitOutput{infoOut: failingObserverSink{writeErr: want}, settings: fileOutputSettings{observer: o}}
-	if n, err := s.Write(zap.InfoLevel, []byte("私有本文")); n != 0 || !errors.Is(err, want) {
+	if n, err := s.Write(zap.InfoLevel, []byte("private message")); n != 0 || !errors.Is(err, want) {
 		t.Fatalf("Write=(%d,%v)", n, err)
 	}
 	event := <-o.Events()
@@ -104,7 +104,7 @@ func TestSplitObserverRotationFailure(t *testing.T) {
 	o := newTestObserver(t, 1)
 	now := time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC)
 	clock := newManualRotationClock(now)
-	want := errors.New("開啟新日誌失敗")
+	want := errors.New("open new log failed")
 	calls := 0
 	opener := func(directory, prefix, date string, _ os.FileMode) (splitFileSet, error) {
 		calls++
@@ -135,9 +135,9 @@ func TestSplitObserverRotationFailure(t *testing.T) {
 			t.Fatal(event)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("等待 rotation 事件逾時")
+		t.Fatal("timed out waiting for rotation event")
 	}
-	if _, err := s.Write(zap.InfoLevel, []byte("舊檔仍可用")); err != nil {
+	if _, err := s.Write(zap.InfoLevel, []byte("old file remains writable")); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -146,7 +146,7 @@ func TestSplitObserverRotationFailure(t *testing.T) {
 	select {
 	case <-s.done:
 	default:
-		t.Fatal("worker 未停止")
+		t.Fatal("worker did not stop")
 	}
 }
 
@@ -168,7 +168,7 @@ func TestGetSplitCoreWithCleanupConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	if err := core.Sync(); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("關閉後 Sync = %v", err)
+		t.Fatalf("Sync after close = %v", err)
 	}
 }
 
@@ -177,14 +177,14 @@ func TestGetSplitCoreWithCleanupReturnsCloseErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 公開建構走真實檔案；錯誤注入另驗證其委派的 SplitOutput.Close callback。
+	// The public constructor uses real files. Error injection separately verifies the delegated SplitOutput.Close callback.
 	if err := core.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	if err := cleanup(); err != nil {
 		t.Fatal(err)
 	}
-	closeErr := errors.New("檔案關閉失敗")
+	closeErr := errors.New("file close failed")
 	output := &SplitOutput{infoOut: &recordingWriteSyncCloser{closeErr: closeErr}}
 	errorCleanup := output.Close
 	for range 2 {
@@ -296,7 +296,7 @@ func (c *manualRotationClock) nextTimer(t *testing.T) *manualRotationTimer {
 	case timer := <-c.timers:
 		return timer
 	case <-time.After(time.Second):
-		t.Fatal("等待換檔 timer 逾時")
+		t.Fatal("timed out waiting for rotation timer")
 		return nil
 	}
 }
@@ -337,7 +337,7 @@ func TestNewSplitCoreRoutesLevels(t *testing.T) {
 		Error: errorSink,
 	})
 	if err != nil {
-		t.Fatalf("建立通用分級 core 失敗：%v", err)
+		t.Fatalf("create generic split core: %v", err)
 	}
 
 	tests := []struct {
@@ -359,7 +359,7 @@ func TestNewSplitCoreRoutesLevels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			checked := core.Check(zapcore.Entry{Level: tt.level, Message: tt.message}, nil)
 			if checked == nil {
-				t.Fatalf("level %s 應啟用", tt.level)
+				t.Fatalf("level %s must be enabled", tt.level)
 			}
 			checked.Write()
 		})
@@ -377,10 +377,10 @@ func TestNewSplitCoreRoutesLevels(t *testing.T) {
 		for sinkName, content := range contents {
 			contains := strings.Contains(content, tt.message)
 			if sinkName == tt.target && !contains {
-				t.Errorf("%s 應寫入 %s sink", tt.message, tt.target)
+				t.Errorf("%s must be written to %s sink", tt.message, tt.target)
 			}
 			if sinkName != tt.target && contains {
-				t.Errorf("%s 不應寫入 %s sink", tt.message, sinkName)
+				t.Errorf("%s must not be written to %s sink", tt.message, sinkName)
 			}
 		}
 	}
@@ -403,18 +403,18 @@ func TestNewSplitCoreRejectsInvalidInputs(t *testing.T) {
 		encoder zapcore.Encoder
 		sinks   SplitSinks
 	}{
-		{name: "缺少 encoder", sinks: newSinks()},
-		{name: "缺少 info", encoder: newEncoder(), sinks: func() SplitSinks {
+		{name: "missing encoder", sinks: newSinks()},
+		{name: "missing info", encoder: newEncoder(), sinks: func() SplitSinks {
 			sinks := newSinks()
 			sinks.Info = nil
 			return sinks
 		}()},
-		{name: "缺少 warn", encoder: newEncoder(), sinks: func() SplitSinks {
+		{name: "missing warn", encoder: newEncoder(), sinks: func() SplitSinks {
 			sinks := newSinks()
 			sinks.Warn = nil
 			return sinks
 		}()},
-		{name: "缺少 error", encoder: newEncoder(), sinks: func() SplitSinks {
+		{name: "missing error", encoder: newEncoder(), sinks: func() SplitSinks {
 			sinks := newSinks()
 			sinks.Error = nil
 			return sinks
@@ -425,10 +425,10 @@ func TestNewSplitCoreRejectsInvalidInputs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			core, err := NewSplitCore(tt.encoder, tt.sinks)
 			if core != nil {
-				t.Fatal("無效輸入不應回傳部分 core")
+				t.Fatal("invalid input must not return a partial core")
 			}
 			if !errors.Is(err, ErrInvalidSplitCore) {
-				t.Fatalf("錯誤 = %v，預期 ErrInvalidSplitCore", err)
+				t.Fatalf("error = %v, want ErrInvalidSplitCore", err)
 			}
 		})
 	}
@@ -443,18 +443,18 @@ func TestNewSplitCoreSyncsSinks(t *testing.T) {
 		SplitSinks{Info: infoSink, Warn: warnSink, Error: errorSink},
 	)
 	if err != nil {
-		t.Fatalf("建立通用分級 core 失敗：%v", err)
+		t.Fatalf("create generic split core: %v", err)
 	}
 
 	if err := core.Sync(); err != nil {
-		t.Fatalf("同步通用分級 core 失敗：%v", err)
+		t.Fatalf("sync generic split core: %v", err)
 	}
 	for name, sink := range map[string]*recordingSplitSink{
 		"info": infoSink, "warn": warnSink, "error": errorSink,
 	} {
 		_, syncCalls, _ := sink.snapshot()
 		if syncCalls != 1 {
-			t.Errorf("%s sink Sync 次數 = %d，預期 1", name, syncCalls)
+			t.Errorf("%s sink Sync calls = %d, want 1", name, syncCalls)
 		}
 	}
 }
@@ -468,18 +468,18 @@ func TestNewSplitCoreDoesNotCloseSinks(t *testing.T) {
 		SplitSinks{Info: infoSink, Warn: warnSink, Error: errorSink},
 	)
 	if err != nil {
-		t.Fatalf("建立通用分級 core 失敗：%v", err)
+		t.Fatalf("create generic split core: %v", err)
 	}
 
 	if err := core.Sync(); err != nil {
-		t.Fatalf("同步通用分級 core 失敗：%v", err)
+		t.Fatalf("sync generic split core: %v", err)
 	}
 	for name, sink := range map[string]*recordingSplitSink{
 		"info": infoSink, "warn": warnSink, "error": errorSink,
 	} {
 		_, _, closeCalls := sink.snapshot()
 		if closeCalls != 0 {
-			t.Errorf("%s sink Close 次數 = %d，預期 0", name, closeCalls)
+			t.Errorf("%s sink Close calls = %d, want 0", name, closeCalls)
 		}
 	}
 }
@@ -517,26 +517,26 @@ func TestNewSplitOutputRejectsUnsafePrefix(t *testing.T) {
 
 	for _, prefix := range unsafePrefixes {
 		t.Run(prefix, func(t *testing.T) {
-			base := filepath.Join(t.TempDir(), "不應建立")
+			base := filepath.Join(t.TempDir(), "must-not-exist")
 			output, err := NewSplitOutput(base, prefix)
 			if output != nil {
 				_ = output.Close()
 			}
 			if !errors.Is(err, ErrUnsafeLogPath) {
-				t.Fatalf("錯誤 = %v，預期 ErrUnsafeLogPath", err)
+				t.Fatalf("error = %v, want ErrUnsafeLogPath", err)
 			}
 			if _, statErr := os.Stat(base); !errors.Is(statErr, os.ErrNotExist) {
-				t.Fatalf("不安全 prefix 不應建立 directory，Stat 錯誤 = %v", statErr)
+				t.Fatalf("unsafe prefix must not create directory, Stat error = %v", statErr)
 			}
 		})
 	}
 
 	output, err := NewSplitOutput(t.TempDir(), "")
 	if err != nil {
-		t.Fatalf("空 prefix 應保持既有可用行為：%v", err)
+		t.Fatalf("empty prefix must retain legacy behavior: %v", err)
 	}
 	if err := output.Close(); err != nil {
-		t.Fatalf("關閉空 prefix SplitOutput 失敗：%v", err)
+		t.Fatalf("close SplitOutput with empty prefix: %v", err)
 	}
 }
 
@@ -690,19 +690,19 @@ func TestSplitOutputCloseStopsRotation(t *testing.T) {
 
 	so, err := newSplitOutput(tmpDir, "app", clock, opener)
 	if err != nil {
-		t.Fatalf("建立分級輸出失敗：%v", err)
+		t.Fatalf("create split output: %v", err)
 	}
 	timer := clock.nextTimer(t)
 
 	if err := so.Close(); err != nil {
-		t.Fatalf("關閉分級輸出失敗：%v", err)
+		t.Fatalf("close split output: %v", err)
 	}
 	if !timer.isStopped() {
-		t.Error("Close 應停止尚未觸發的換檔 timer")
+		t.Error("Close must stop the pending rotation timer")
 	}
 
 	if err := so.openFiles(); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("關閉後換檔應回傳 os.ErrClosed，實際為：%v", err)
+		t.Fatalf("rotation after close must return os.ErrClosed, got: %v", err)
 	}
 
 	clock.setNow(now.AddDate(0, 0, 1))
@@ -710,7 +710,7 @@ func TestSplitOutputCloseStopsRotation(t *testing.T) {
 	openerMu.Lock()
 	defer openerMu.Unlock()
 	if openerCalls != 1 {
-		t.Fatalf("Close 後不得再次開檔，opener 實際呼叫 %d 次", openerCalls)
+		t.Fatalf("must not reopen files after Close, opener calls = %d", openerCalls)
 	}
 }
 
@@ -731,7 +731,7 @@ func TestSplitOutputCloseIdempotent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			if err := so.Close(); err != nil {
-				t.Errorf("並行關閉分級輸出失敗：%v", err)
+				t.Errorf("close split output concurrently: %v", err)
 			}
 		}()
 	}
@@ -744,15 +744,15 @@ func TestSplitOutputCloseIdempotent(t *testing.T) {
 	} {
 		_, closeCalls := output.counts()
 		if closeCalls != 1 {
-			t.Errorf("%s 輸出應只關閉一次，實際關閉 %d 次", name, closeCalls)
+			t.Errorf("%s output must close once, got %d calls", name, closeCalls)
 		}
 	}
 }
 
 func TestSplitOutputCloseReturnsAllErrors(t *testing.T) {
-	infoErr := errors.New("info 關閉失敗")
-	warnErr := errors.New("warn 關閉失敗")
-	errorErr := errors.New("error 關閉失敗")
+	infoErr := errors.New("info close failed")
+	warnErr := errors.New("warn close failed")
+	errorErr := errors.New("error close failed")
 	so := &SplitOutput{
 		infoOut:  &recordingWriteSyncCloser{closeErr: infoErr},
 		warnOut:  &recordingWriteSyncCloser{closeErr: warnErr},
@@ -762,7 +762,7 @@ func TestSplitOutputCloseReturnsAllErrors(t *testing.T) {
 	err := so.Close()
 	for _, expected := range []error{infoErr, warnErr, errorErr} {
 		if !errors.Is(err, expected) {
-			t.Errorf("Close 應包含錯誤 %v，實際為：%v", expected, err)
+			t.Errorf("Close must contain error %v, got: %v", expected, err)
 		}
 	}
 }
@@ -770,17 +770,17 @@ func TestSplitOutputCloseReturnsAllErrors(t *testing.T) {
 func TestSplitOutputAfterClose(t *testing.T) {
 	so, err := NewSplitOutput(t.TempDir(), "app")
 	if err != nil {
-		t.Fatalf("建立分級輸出失敗：%v", err)
+		t.Fatalf("create split output: %v", err)
 	}
 	if err := so.Close(); err != nil {
-		t.Fatalf("關閉分級輸出失敗：%v", err)
+		t.Fatalf("close split output: %v", err)
 	}
 
-	if _, err := so.Write(zapcore.InfoLevel, []byte("關閉後不得寫入\n")); !errors.Is(err, os.ErrClosed) {
-		t.Errorf("關閉後寫入應回傳 os.ErrClosed，實際為：%v", err)
+	if _, err := so.Write(zapcore.InfoLevel, []byte("must not write after close\n")); !errors.Is(err, os.ErrClosed) {
+		t.Errorf("write after close must return os.ErrClosed, got: %v", err)
 	}
 	if err := so.Sync(); !errors.Is(err, os.ErrClosed) {
-		t.Errorf("關閉後同步應回傳 os.ErrClosed，實際為：%v", err)
+		t.Errorf("sync after close must return os.ErrClosed, got: %v", err)
 	}
 }
 
@@ -798,14 +798,14 @@ func TestSplitOutputRotationFailureKeepsCurrentFiles(t *testing.T) {
 		openerMu.Unlock()
 		if call == 2 {
 			close(rotationAttempted)
-			return splitFileSet{}, errors.New("測試換檔失敗")
+			return splitFileSet{}, errors.New("test rotation failed")
 		}
 		return openSplitFiles(directory, filePrefix, date)
 	}
 
 	so, err := newSplitOutput(tmpDir, "app", clock, opener)
 	if err != nil {
-		t.Fatalf("建立分級輸出失敗：%v", err)
+		t.Fatalf("create split output: %v", err)
 	}
 	t.Cleanup(func() { _ = so.Close() })
 
@@ -815,25 +815,25 @@ func TestSplitOutputRotationFailureKeepsCurrentFiles(t *testing.T) {
 	select {
 	case <-rotationAttempted:
 	case <-time.After(time.Second):
-		t.Fatal("等待換檔失敗情境逾時")
+		t.Fatal("timed out waiting for failed rotation")
 	}
 
-	message := []byte("換檔失敗後仍可寫入\n")
+	message := []byte("still writable after failed rotation\n")
 	if _, err := so.Write(zapcore.InfoLevel, message); err != nil {
-		t.Fatalf("換檔失敗後寫入舊檔失敗：%v", err)
+		t.Fatalf("write old file after failed rotation: %v", err)
 	}
 	if err := so.Sync(); err != nil {
-		t.Fatalf("同步既有檔案失敗：%v", err)
+		t.Fatalf("sync existing files: %v", err)
 	}
 
 	infoPath := filepath.Join(tmpDir, "app-info-"+now.Format("2006-01-02")+".log")
-	//nolint:gosec // infoPath 由 t.TempDir 與固定分級檔名組成。
+	//nolint:gosec // infoPath combines t.TempDir with a fixed split filename.
 	data, err := os.ReadFile(infoPath)
 	if err != nil {
-		t.Fatalf("讀取既有 info 日誌檔失敗：%v", err)
+		t.Fatalf("read existing info log file: %v", err)
 	}
 	if !strings.Contains(string(data), strings.TrimSpace(string(message))) {
-		t.Errorf("換檔失敗後的訊息未寫入既有 info 日誌檔")
+		t.Errorf("entry after failed rotation was not written to existing info log")
 	}
 }
 
@@ -843,7 +843,7 @@ func TestSplitOutputRotationSwitchesFiles(t *testing.T) {
 	clock := newManualRotationClock(now)
 	so, err := newSplitOutput(tmpDir, "app", clock, openSplitFiles)
 	if err != nil {
-		t.Fatalf("建立分級輸出失敗：%v", err)
+		t.Fatalf("create split output: %v", err)
 	}
 	t.Cleanup(func() { _ = so.Close() })
 
@@ -853,55 +853,55 @@ func TestSplitOutputRotationSwitchesFiles(t *testing.T) {
 	firstTimer.fire(nextDay)
 	clock.nextTimer(t)
 
-	message := []byte("換檔成功後寫入新檔\n")
+	message := []byte("write new file after successful rotation\n")
 	if _, err := so.Write(zapcore.InfoLevel, message); err != nil {
-		t.Fatalf("換檔成功後寫入失敗：%v", err)
+		t.Fatalf("write after successful rotation: %v", err)
 	}
 	if err := so.Sync(); err != nil {
-		t.Fatalf("換檔成功後同步失敗：%v", err)
+		t.Fatalf("sync after successful rotation: %v", err)
 	}
 
 	newInfoPath := filepath.Join(tmpDir, "app-info-"+nextDay.Format("2006-01-02")+".log")
-	//nolint:gosec // newInfoPath 由 t.TempDir 與固定分級檔名組成。
+	//nolint:gosec // newInfoPath combines t.TempDir with a fixed split filename.
 	data, err := os.ReadFile(newInfoPath)
 	if err != nil {
-		t.Fatalf("讀取換檔後 info 日誌檔失敗：%v", err)
+		t.Fatalf("read rotated info log file: %v", err)
 	}
 	if !strings.Contains(string(data), strings.TrimSpace(string(message))) {
-		t.Error("換檔成功後的訊息未寫入新日期 info 日誌檔")
+		t.Error("entry after successful rotation was not written to the new date's info log")
 	}
 }
 
 func TestSplitOutputWithOptionsPreservesPermissionsAcrossRotation(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 不提供相同 POSIX mode 語意")
+		t.Skip("Windows does not provide equivalent POSIX mode semantics")
 	}
 
 	parent := t.TempDir()
 	referenceDir := filepath.Join(parent, "reference")
 	if err := os.Mkdir(referenceDir, 0o750); err != nil {
-		t.Fatalf("建立參考目錄失敗：%v", err)
+		t.Fatalf("create reference directory: %v", err)
 	}
 	referenceFile := filepath.Join(referenceDir, "reference.log")
-	//nolint:gosec // 測試刻意建立 0640 參考檔，驗證 rotation 沿用 group-read 權限。
+	//nolint:gosec // Deliberately create a 0640 reference file to verify group-read permissions after rotation.
 	if err := os.WriteFile(referenceFile, nil, 0o640); err != nil {
-		t.Fatalf("建立參考檔案失敗：%v", err)
+		t.Fatalf("create reference file: %v", err)
 	}
 
 	settings, err := resolveFileOutputOptions(WithDirPerm(0o750), WithFilePerm(0o640))
 	if err != nil {
-		t.Fatalf("解析自訂 permissions 失敗：%v", err)
+		t.Fatalf("resolve custom permissions: %v", err)
 	}
 	now := time.Date(2026, time.July, 29, 10, 0, 0, 0, time.Local)
 	clock := newManualRotationClock(now)
 	base := filepath.Join(parent, "logs")
 	output, err := newSplitOutputWithSettings(base, "app", clock, openSplitFilesWithPermissions, settings)
 	if err != nil {
-		t.Fatalf("以自訂 permissions 建立 SplitOutput 失敗：%v", err)
+		t.Fatalf("create SplitOutput with custom permissions: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := output.Close(); err != nil {
-			t.Errorf("關閉 SplitOutput 失敗：%v", err)
+			t.Errorf("close SplitOutput: %v", err)
 		}
 	})
 
@@ -919,7 +919,7 @@ func TestSplitOutputWithOptionsPreservesPermissionsAcrossRotation(t *testing.T) 
 
 func TestNewSplitOutputWithOptionsUsesConfiguredPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 不提供相同 POSIX mode 語意")
+		t.Skip("Windows does not provide equivalent POSIX mode semantics")
 	}
 
 	parent := t.TempDir()
@@ -932,10 +932,10 @@ func TestNewSplitOutputWithOptionsUsesConfiguredPermissions(t *testing.T) {
 		WithFilePerm(0o640),
 	)
 	if err != nil {
-		t.Fatalf("以自訂 permissions 建立 SplitOutput 失敗：%v", err)
+		t.Fatalf("create SplitOutput with custom permissions: %v", err)
 	}
 	if err := output.Close(); err != nil {
-		t.Fatalf("關閉 SplitOutput 失敗：%v", err)
+		t.Fatalf("close SplitOutput: %v", err)
 	}
 
 	assertSamePermission(t, base, referenceDir)
@@ -944,7 +944,7 @@ func TestNewSplitOutputWithOptionsUsesConfiguredPermissions(t *testing.T) {
 
 func TestGetSplitCoreWithOptionsUsesConfiguredPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 不提供相同 POSIX mode 語意")
+		t.Skip("Windows does not provide equivalent POSIX mode semantics")
 	}
 
 	parent := t.TempDir()
@@ -962,10 +962,10 @@ func TestGetSplitCoreWithOptionsUsesConfiguredPermissions(t *testing.T) {
 		WithFilePerm(0o640),
 	)
 	if err != nil {
-		t.Fatalf("以自訂 permissions 建立 split core 失敗：%v", err)
+		t.Fatalf("create split core with custom permissions: %v", err)
 	}
 	if core == nil || cleanup == nil {
-		t.Fatal("成功時應回傳 core 與 cleanup")
+		t.Fatal("success must return a core and cleanup")
 	}
 	cleanup()
 
@@ -982,7 +982,7 @@ func assertCreatedSplitFilePermissions(
 	t.Helper()
 	entries, err := os.ReadDir(base)
 	if err != nil {
-		t.Fatalf("讀取分級輸出目錄失敗：%v", err)
+		t.Fatalf("read split output directory: %v", err)
 	}
 	matched := 0
 	for _, entry := range entries {
@@ -993,7 +993,7 @@ func assertCreatedSplitFilePermissions(
 		assertSamePermission(t, filepath.Join(base, entry.Name()), referenceFile)
 	}
 	if matched != 3 {
-		t.Fatalf("符合 prefix 的分級檔案數 = %d，預期 3", matched)
+		t.Fatalf("split file count matching prefix = %d, want 3", matched)
 	}
 }
 
@@ -1058,33 +1058,33 @@ func TestSplitOutputSync(t *testing.T) {
 	}
 
 	if err := so.Sync(); err != nil {
-		t.Fatalf("同步全部分級輸出失敗：%v", err)
+		t.Fatalf("sync all split outputs: %v", err)
 	}
 
 	infoSyncs, _ := infoOut.counts()
 	warnSyncs, _ := warnOut.counts()
 	errorSyncs, _ := errorOut.counts()
 	if infoSyncs != 1 || warnSyncs != 1 || errorSyncs != 1 {
-		t.Fatalf("Sync 應各同步一次，實際次數 info=%d warn=%d error=%d", infoSyncs, warnSyncs, errorSyncs)
+		t.Fatalf("Sync must flush each output once, calls info=%d warn=%d error=%d", infoSyncs, warnSyncs, errorSyncs)
 	}
 
 	wrapper := &splitOutputWrapper{so: so, lvl: zapcore.InfoLevel}
 	if err := wrapper.Sync(); err != nil {
-		t.Fatalf("同步 info 輸出失敗：%v", err)
+		t.Fatalf("sync info output: %v", err)
 	}
 
 	infoSyncs, _ = infoOut.counts()
 	warnSyncs, _ = warnOut.counts()
 	errorSyncs, _ = errorOut.counts()
 	if infoSyncs != 2 || warnSyncs != 1 || errorSyncs != 1 {
-		t.Fatalf("wrapper 應只同步 info 輸出，實際次數 info=%d warn=%d error=%d", infoSyncs, warnSyncs, errorSyncs)
+		t.Fatalf("wrapper must sync only info output, calls info=%d warn=%d error=%d", infoSyncs, warnSyncs, errorSyncs)
 	}
 }
 
 func TestSplitOutputSyncReturnsAllErrors(t *testing.T) {
-	infoErr := errors.New("info 同步失敗")
-	warnErr := errors.New("warn 同步失敗")
-	errorErr := errors.New("error 同步失敗")
+	infoErr := errors.New("info sync failed")
+	warnErr := errors.New("warn sync failed")
+	errorErr := errors.New("error sync failed")
 	so := &SplitOutput{
 		infoOut:  &recordingWriteSyncCloser{syncErr: infoErr},
 		warnOut:  &recordingWriteSyncCloser{syncErr: warnErr},
@@ -1094,7 +1094,7 @@ func TestSplitOutputSyncReturnsAllErrors(t *testing.T) {
 	err := so.Sync()
 	for _, expected := range []error{infoErr, warnErr, errorErr} {
 		if !errors.Is(err, expected) {
-			t.Errorf("Sync 應包含錯誤 %v，實際為：%v", expected, err)
+			t.Errorf("Sync must contain error %v, got: %v", expected, err)
 		}
 	}
 }
@@ -1161,7 +1161,7 @@ func TestGetSplitCoreRoutesLevels(t *testing.T) {
 
 	core, cleanup, err := GetSplitCore(tmpDir, "app", encoderConfig)
 	if err != nil {
-		t.Fatalf("建立分級 core 失敗：%v", err)
+		t.Fatalf("create split core: %v", err)
 	}
 
 	entries := []struct {
@@ -1180,13 +1180,13 @@ func TestGetSplitCoreRoutesLevels(t *testing.T) {
 	for _, entry := range entries {
 		checked := core.Check(zapcore.Entry{Level: entry.level, Message: entry.message}, nil)
 		if checked == nil {
-			t.Errorf("級別 %s 應啟用但未取得 CheckedEntry", entry.level)
+			t.Errorf("enabled level %s did not produce a CheckedEntry", entry.level)
 			continue
 		}
 		checked.Write()
 	}
 	if err := core.Sync(); err != nil {
-		t.Errorf("同步分級 core 失敗：%v", err)
+		t.Errorf("sync split core: %v", err)
 	}
 	cleanup()
 
@@ -1194,14 +1194,14 @@ func TestGetSplitCoreRoutesLevels(t *testing.T) {
 	for _, levelName := range []string{"info", "warn", "error"} {
 		matches, err := filepath.Glob(filepath.Join(tmpDir, "app-"+levelName+"-*.log"))
 		if err != nil {
-			t.Fatalf("搜尋 %s 日誌檔失敗：%v", levelName, err)
+			t.Fatalf("find %s log file: %v", levelName, err)
 		}
 		if len(matches) != 1 {
-			t.Fatalf("預期一個 %s 日誌檔，實際為 %d 個", levelName, len(matches))
+			t.Fatalf("expected one %s log file, got %d", levelName, len(matches))
 		}
 		data, err := os.ReadFile(matches[0])
 		if err != nil {
-			t.Fatalf("讀取 %s 日誌檔失敗：%v", levelName, err)
+			t.Fatalf("read %s log file: %v", levelName, err)
 		}
 		contents[levelName] = string(data)
 	}
@@ -1219,10 +1219,10 @@ func TestGetSplitCoreRoutesLevels(t *testing.T) {
 		for levelName, content := range contents {
 			contains := strings.Contains(content, message)
 			if levelName == target && !contains {
-				t.Errorf("%s 應存在於 %s 日誌檔", message, target)
+				t.Errorf("%s must be present in %s log file", message, target)
 			}
 			if levelName != target && contains {
-				t.Errorf("%s 不應存在於 %s 日誌檔", message, levelName)
+				t.Errorf("%s must not be present in %s log file", message, levelName)
 			}
 		}
 	}
@@ -1230,20 +1230,20 @@ func TestGetSplitCoreRoutesLevels(t *testing.T) {
 
 func TestNewSplitOutputInvalidDirectory(t *testing.T) {
 	parentFile := filepath.Join(t.TempDir(), "parent-file")
-	if err := os.WriteFile(parentFile, []byte("不是目錄"), 0600); err != nil {
-		t.Fatalf("建立測試檔案失敗：%v", err)
+	if err := os.WriteFile(parentFile, []byte("not a directory"), 0600); err != nil {
+		t.Fatalf("create test file: %v", err)
 	}
 
 	_, err := NewSplitOutput(filepath.Join(parentFile, "child"), "app")
 	if err == nil {
-		t.Fatal("父路徑為一般檔案時應建立失敗")
+		t.Fatal("construction must fail when the parent path is a regular file")
 	}
 }
 
 func TestGetSplitCoreInvalidDirectory(t *testing.T) {
 	parentFile := filepath.Join(t.TempDir(), "parent-file")
-	if err := os.WriteFile(parentFile, []byte("不是目錄"), 0600); err != nil {
-		t.Fatalf("建立測試檔案失敗：%v", err)
+	if err := os.WriteFile(parentFile, []byte("not a directory"), 0600); err != nil {
+		t.Fatalf("create test file: %v", err)
 	}
 
 	_, cleanup, err := GetSplitCore(filepath.Join(parentFile, "child"), "app", zap.NewProductionEncoderConfig())
@@ -1251,6 +1251,6 @@ func TestGetSplitCoreInvalidDirectory(t *testing.T) {
 		if cleanup != nil {
 			cleanup()
 		}
-		t.Fatal("父路徑為一般檔案時應建立 core 失敗")
+		t.Fatal("core construction must fail when the parent path is a regular file")
 	}
 }

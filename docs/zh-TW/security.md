@@ -13,7 +13,7 @@
 它不接受秘密值，也不受自動遮罩開關影響。
 
 ```go
-zlogger.Info("驗證請求",
+zlogger.Info("authentication request",
 	zlogger.Redacted("authorization"),
 	zlogger.String("request_id", "req-123"),
 )
@@ -62,8 +62,8 @@ func run() error {
 	}
 
 	logger := zap.New(core)
-	logger.With(zlogger.String("token", "示範用值")).Info(
-		"驗證請求", zlogger.String("request_id", "req-123"),
+	logger.With(zlogger.String("token", "example value")).Info(
+		"authentication request", zlogger.String("request_id", "req-123"),
 	)
 	return nil
 }

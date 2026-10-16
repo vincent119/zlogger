@@ -10,8 +10,9 @@
 ## 語言與溝通
 
 - 預設使用繁體中文（台灣）回應、撰寫文件、commit message、PR title 與 PR description。
-- 程式碼保留既有語言；註解與 docstring 使用繁體中文，說明「為什麼」而非逐行複述行為。
-- 英文僅用於程式碼、路徑、URL、API 欄位、技術名稱與必要專有名詞。
+- 程式碼保留既有語言；既有及新增的註解、docstring 與套件固定錯誤、日誌、診斷訊息使用英文，說明「為什麼」而非逐行複述行為。
+- 使用者輸入、外部錯誤、Unicode 與敏感值測試資料保留原文，不因語言規則翻譯。README 與說明文件維持中英文雙語，程式碼範例的一般註解及顯示文字使用英文。
+- 回應、commit 與 PR 維持繁體中文；英文另可用於程式碼、路徑、URL、API 欄位、技術名稱與必要專有名詞。
 - 交付時先說明結果，再說明根本原因、驗證證據、未驗證範圍、部署或回滾影響。
 - 明確標示未知資訊與假設；不得把未驗證工作說成完成。
 
@@ -63,7 +64,7 @@
 - 函式維持單一責任，使用 early return，避免不必要的巢狀 `else`。
 - `context.Context` 是 I/O、HTTP、資料庫、queue 與外部服務邊界函式的第一個參數，且必須向下傳遞。
 - 不得把 `context.Context` 存進 struct，也不得在 request path 任意使用 `context.Background()`。
-- 立即處理錯誤；需補上下文時使用 `fmt.Errorf("情境: %w", err)`，跨層判斷使用 `errors.Is` 或 `errors.As`。
+- 立即處理錯誤；需補上下文時使用英文固定前綴，例如 `fmt.Errorf("operation: %w", err)`，跨層判斷使用 `errors.Is` 或 `errors.As`。
 - 正常錯誤流程以 `error` 回傳；library、handler、worker 不得使用 `panic`、`log.Fatal` 或 `os.Exit`。
 - error string 以小寫開頭、不加結尾標點，除非專案既有規範不同。
 - 縮寫遵循 Go 慣例，例如 `URL`、`HTTP`、`ID`、`API`。
