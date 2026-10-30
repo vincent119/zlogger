@@ -70,6 +70,9 @@ instance.Logger().Info("worker started")
 編碼和輸出由 core 決定，patch 只用 Level、AddCaller、AddStacktrace、Development，
 其餘設定仍須通過 Resolve 驗證。
 
+`Redaction.Enabled=true` 是例外，會回傳 `ErrInvalidConfig`，避免誤認外部 core 已受保護。
+外部遮罩 core 請先用 `NewRedactingCore` 建立，再搭配 nil／停用的高階遮罩設定。
+
 外部 sink 預設仍由呼叫端負責。`WithCoreCleanup(func() error)` 可明確登記清理工作，
 cleanup 會先 Sync，再執行該 callback，即使 Sync 失敗仍會執行並合併錯誤。
 callback 不可為 nil 或重複登記，設定失敗時也不會執行，呼叫端仍須自行回收資源。
@@ -82,6 +85,10 @@ callback 不可為 nil 或重複登記，設定失敗時也不會執行，呼叫
 Outputs 仍會驗證，但不決定輸出位置。
 
 ## 遮罩與故障通知的清理
+
+一般與每日三檔高階入口可透過 `Config.Redaction`／`ConfigPatch.Redaction` 啟用遮罩。
+設定會先驗證，才建立檔案或 worker；不新增資源，也不改變原先的 Sync、Close 或 cleanup 順序。
+split 可同時使用 `WithOutputObserver`；遮罩拒絕不產生 sink 故障事件。
 
 `NewRedactingCore` 要接收尚未綁定欄位的 encoder。
 它自行建立 core，不接受任意既有 core，不取得 sink 所有權，也不新增背景工作。

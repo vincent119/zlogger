@@ -9,7 +9,7 @@
 `ConfigPatch` 的每個欄位都是指標。nil 代表沒提供，非 nil 就使用該值，
 包含明確設定的 false、空字串或空 slice。先區分這兩種情況，才不會把「關掉功能」誤當成「使用預設值」。
 
-`Resolve` 會從 `DefaultConfig` 補齊缺少的值，複製 outputs，
+`Resolve` 會從 `DefaultConfig` 補齊缺少的值，複製 outputs 與 redaction.keys，
 把 level、format、outputs 轉成小寫，再驗證結果。
 
 `Config` 則是完整設定，可由 `DefaultConfig()` 開始修改。
@@ -96,6 +96,8 @@ defer func() { _ = cleanup() }()
 | `add_stacktrace` | bool | `false` | 加入 ERROR 以上的堆疊資訊 |
 | `development` | bool | `false` | zap development mode |
 | `color_enabled` | bool | `true` | 僅 console format 產生 ANSI 色碼 |
+| `redaction.enabled` | bool | `false` | 建構時啟用結構化欄位遮罩 |
+| `redaction.keys` | []string | nil | 啟用時需 1 至 128 個 key，每個 1 至 128 bytes；停用時忽略 |
 
 無效值可由 `errors.Is(err, zlogger.ErrInvalidConfig)` 判斷。file output 的不安全
 `file_name` 同時保留 `ErrInvalidConfig` 與 `ErrUnsafeLogPath`。decoder 與檔案 I/O 錯誤
@@ -108,5 +110,29 @@ ANSI，即使 `color_enabled` 保持 true。
 
 檔案建立權限不是設定檔欄位；請參閱[安全性](security.md)與 `ConfigureWithOptions`。
 
-`RedactionConfig` 也是獨立設定，只交給 `NewRedactingCore`，不是 ConfigPatch 的欄位。
-需要遮罩時請看[安全性範例](security.md)。
+## 遮罩設定
+
+`Config.Redaction` 是 `RedactionConfig`，`ConfigPatch.Redaction` 則是其指標。
+nil 表示使用預設的關閉政策；非 nil 整組取代，不會逐 key 合併。
+
+```go
+patch := &zlogger.ConfigPatch{
+	Redaction: &zlogger.RedactionConfig{
+		Enabled: true,
+		Keys:    []string{"token", "password"},
+	},
+}
+```
+
+上述設定適用於 `Configure`／`ConfigureWithOptions`／`ConfigureSplit`。
+`New`／`NewWithOptions`／`NewSplit` 則設定 `cfg.Redaction`。
+無效的啟用設定會在開檔或啟動 worker 前回傳 `ErrInvalidConfig`。
+建構後修改原始 Enabled 或 Keys 不會改變既有 logger。
+
+舊 `Config.Merge` 對非 nil 的 other 整組覆寫 Redaction，包含 Enabled=false，並複製 Keys；
+它不能區分省略和明確關閉，建議改用 ConfigPatch。新增 struct 欄位後，使用非具名
+Config／ConfigPatch literal 的程式應改成具名欄位。
+
+`ConfigureCore` 不替外部 core 套用遮罩；Enabled=true 會回傳 `ErrInvalidConfig`。
+請先用 `NewRedactingCore` 組裝，再以 nil／停用的高階政策呼叫 ConfigureCore。
+Keys 比對、opaque 值與自由文字限制見[安全性](security.md)。

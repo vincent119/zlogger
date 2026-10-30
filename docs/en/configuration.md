@@ -10,7 +10,7 @@ Start with `ConfigPatch`. Each field is a pointer.
 Nil means omitted. A non-nil pointer supplies the value, including false, an empty string,
 or an empty slice, so you can turn a feature off without accidentally asking for its default.
 
-`Resolve` fills missing values from `DefaultConfig`, copies outputs, lowercases level,
+`Resolve` fills missing values from `DefaultConfig`, copies outputs and redaction.keys, lowercases level,
 format, and outputs, then validates the result.
 
 `Config` holds a complete configuration. Start with `DefaultConfig()` and edit what you need.
@@ -98,6 +98,8 @@ defer func() { _ = cleanup() }()
 | `add_stacktrace` | bool | `false` | Add stack traces at ERROR and above |
 | `development` | bool | `false` | zap development mode |
 | `color_enabled` | bool | `true` | Emit ANSI colors only for console format |
+| `redaction.enabled` | bool | `false` | Enable structured-field redaction at construction |
+| `redaction.keys` | []string | nil | When enabled, 1 to 128 keys of 1 to 128 bytes each; ignored when disabled |
 
 Check invalid settings with `errors.Is(err, zlogger.ErrInvalidConfig)`.
 With file output enabled, an unsafe file_name also preserves `ErrUnsafeLogPath`.
@@ -111,5 +113,32 @@ contain ANSI, even when `color_enabled` remains true.
 File creation permissions are not configuration-file fields. See [Security](security.md) and
 `ConfigureWithOptions`.
 
-`RedactionConfig` is separate. Pass it to `NewRedactingCore`, not ConfigPatch.
-See the [security example](security.md) to enable redaction.
+## Redaction settings
+
+`Config.Redaction` holds a `RedactionConfig`; `ConfigPatch.Redaction` is a pointer to one.
+Nil keeps the default disabled policy. A non-nil pointer replaces the whole policy;
+keys aren't merged individually.
+
+```go
+patch := &zlogger.ConfigPatch{
+	Redaction: &zlogger.RedactionConfig{
+		Enabled: true,
+		Keys:    []string{"token", "password"},
+	},
+}
+```
+
+Use this patch with `Configure`, `ConfigureWithOptions`, or `ConfigureSplit`.
+For `New`, `NewWithOptions`, and `NewSplit`, set `cfg.Redaction` instead.
+Invalid enabled policies return `ErrInvalidConfig` before opening files or starting workers.
+Later edits to the original Enabled or Keys don't affect a constructed logger.
+
+Legacy `Config.Merge` replaces the whole Redaction policy for a non-nil other, including
+Enabled=false, and copies Keys. It can't distinguish omission from an explicit disable;
+prefer ConfigPatch. New struct fields require callers using unkeyed Config or ConfigPatch
+literals to switch to named fields.
+
+`ConfigureCore` doesn't apply redaction to an external core and rejects Enabled=true with
+`ErrInvalidConfig`. Build the core with `NewRedactingCore` first, then pass a nil or disabled
+high-level policy to ConfigureCore. See [security](security.md) for matching, opaque values,
+and free-text limits.

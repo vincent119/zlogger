@@ -94,12 +94,14 @@ func run() error {
 通道滿載時會丟棄新事件並累計 `Dropped()`，不會等候事件消費者。
 它不保證每次故障都能送達，也不涵蓋 core 編碼錯誤。
 
-遮罩要自行開啟。`NewRedactingCore(encoder, sink, level, cfg)` 搭配
+遮罩預設關閉。一般 `New`／`Configure` 系列及 `NewSplit`／`ConfigureSplit`
+可透過 `Config.Redaction`／`ConfigPatch.Redaction` 設定
 `RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}`，
-可在欄位送往 sink 前套用規則。設定在建構時固定，無法執行中切換。
+不必自行組裝 zapcore。設定在建構時固定，無法執行中切換。
 message 自由文字不會被遮罩，Reflect、Stringer、Error 則會整欄遮罩，減少可用的診斷細節。
 
-一般 `New`／`Configure` 與每日 split 建構入口不會自動套用遮罩。
+自訂輸出仍可使用 `NewRedactingCore(encoder, sink, level, cfg)`。
+`ConfigureCore` 不套用高階遮罩設定，傳入 `Redaction.Enabled=true` 會回傳 `ErrInvalidConfig`。
 用法及限制分別見[輸出模式](docs/zh-TW/output-modes.md)與[安全性](docs/zh-TW/security.md)。
 
 ## 設定與欄位由誰決定？

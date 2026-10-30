@@ -22,6 +22,12 @@
 `GetSplitCore` 和 `GetSplitCoreWithOptions` 仍保留，但舊 `func()` 會忽略 Close 錯誤。
 新的 `GetSplitCoreWithCleanup` 不自動 Sync，也不設定全域 logger。
 
+高階 `New`／`Configure` 系列與 `NewSplit`／`ConfigureSplit` 可透過
+`Config.Redaction`／`ConfigPatch.Redaction` 啟用遮罩，預設關閉。
+政策涵蓋一般輸出的所有 sink 與 split 三檔，保留原分級及清理行為。
+低階 core／SplitOutput 入口不讀取這份設定；custom core 請自行使用 `NewRedactingCore`。
+完整範例與限制見[安全性](security.md)。
+
 ## 每日三檔
 
 Info 檔接收 DEBUG、INFO，warn 檔接收 WARN，error 檔接收 ERROR、DPANIC、PANIC、FATAL。

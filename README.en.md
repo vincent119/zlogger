@@ -98,12 +98,14 @@ There is no non-global Instance constructor that accepts an arbitrary custom cor
 A full channel drops new events and increments `Dropped()` rather than blocking the write.
 Delivery is best-effort. Core encoding errors aren't covered.
 
-Redaction is off by default. Build a core with `NewRedactingCore(encoder, sink, level, cfg)`
-and `RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}`.
+Redaction is off by default. The `New`/`Configure` families and `NewSplit`/`ConfigureSplit`
+accept `RedactionConfig{Enabled: true, Keys: []string{"token", "password"}}` through
+`Config.Redaction` or `ConfigPatch.Redaction`, without assembling zapcore components.
 The policy is fixed at construction. Free-text messages stay unchanged.
 Reflect, Stringer, and Error values are fully masked, which removes some diagnostic detail.
 
-Regular `New`/`Configure` and daily split constructors don't enable redaction for you.
+For custom outputs, use `NewRedactingCore(encoder, sink, level, cfg)`.
+`ConfigureCore` rejects high-level `Redaction.Enabled=true` with `ErrInvalidConfig`.
 See [output modes](docs/en/output-modes.md) and [security](docs/en/security.md) for setup and limits.
 
 ## You choose configuration sources and field names
