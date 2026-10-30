@@ -24,9 +24,56 @@ The authorization field contains `[REDACTED]`. Other fields aren't scanned by th
 
 ## Redact fields by name
 
+Regular and daily split constructors support redaction, disabled by default.
+Set `Config.Redaction` for `New`, `NewWithOptions`, and `NewSplit`, or
+`ConfigPatch.Redaction` for `Configure`, `ConfigureWithOptions`, and `ConfigureSplit`.
+Supply `Enabled: true` and `Keys`; no direct zap or zapcore import is needed.
+
+This function masks token, keeps request_id, writes a regular file, and returns sync or close errors.
+
+```go
+package example
+
+import (
+	"errors"
+
+	"github.com/vincent119/zlogger"
+)
+
+func WriteMaskedLog(directory string) (err error) {
+	cfg := zlogger.DefaultConfig()
+	cfg.Format, cfg.Outputs = "json", []string{"file"}
+	cfg.LogPath, cfg.FileName = directory, "app.log"
+	cfg.Redaction = zlogger.RedactionConfig{
+		Enabled: true,
+		Keys:    []string{"token", "password"},
+	}
+	instance, err := zlogger.New(cfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = errors.Join(err, instance.Sync(), instance.Close())
+	}()
+	instance.Logger().Info("authentication request",
+		zlogger.String("token", "example value"),
+		zlogger.String("request_id", "req-123"),
+	)
+	return nil
+}
+```
+
+The token value is `[REDACTED]`. For daily files, pass the same cfg to `NewSplit(cfg)`;
+FileName becomes a prefix and Close syncs, stops rotation, and closes files automatically.
+See [configuration](configuration.md#redaction-settings) for global setup and
+[lifecycle](lifecycle.md) for cleanup. Regular and split constructors validate the policy
+before creating files or workers. Initialization logs use the same policy.
+
+### Custom encoders or sinks
+
 `NewRedactingCore(encoder, sink, level, cfg)` builds its own core.
 Redaction starts disabled. Set `Enabled: true` and provide `Keys` to enable it.
-Regular and daily split constructors don't apply this policy automatically.
+Use this low-level constructor to assemble your own outputs. Sink ownership stays with you.
 
 This complete example masks token and keeps request_id.
 
@@ -74,6 +121,8 @@ func run() error {
 This writes to stdout and leaves os.Stdout open.
 For files or other sinks, [sync and close the resources you own](lifecycle.md).
 You can also pass the core to `ConfigureCore` to use zlogger's global API.
+Leave ConfigPatch.Redaction nil or disabled in that case. Enabled=true returns ErrInvalidConfig,
+without wrapping the existing core or running its cleanup callback.
 
 ### The policy is fixed at construction
 

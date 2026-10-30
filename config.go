@@ -24,6 +24,8 @@ type Config struct {
 	AddStacktrace bool     `json:"add_stacktrace" yaml:"add_stacktrace" toml:"add_stacktrace" mapstructure:"add_stacktrace"`
 	Development   bool     `json:"development" yaml:"development" toml:"development" mapstructure:"development"`
 	ColorEnabled  bool     `json:"color_enabled" yaml:"color_enabled" toml:"color_enabled" mapstructure:"color_enabled"`
+	// Redaction is fixed at construction and defaults to disabled.
+	Redaction RedactionConfig `json:"redaction" yaml:"redaction" toml:"redaction" mapstructure:"redaction"`
 }
 
 // ConfigPatch distinguishes omitted settings from explicit zero values.
@@ -37,6 +39,8 @@ type ConfigPatch struct {
 	AddStacktrace *bool     `json:"add_stacktrace,omitempty" yaml:"add_stacktrace,omitempty" toml:"add_stacktrace,omitempty" mapstructure:"add_stacktrace"`
 	Development   *bool     `json:"development,omitempty" yaml:"development,omitempty" toml:"development,omitempty" mapstructure:"development"`
 	ColorEnabled  *bool     `json:"color_enabled,omitempty" yaml:"color_enabled,omitempty" toml:"color_enabled,omitempty" mapstructure:"color_enabled"`
+	// Redaction replaces the entire policy when non-nil; nil keeps the default.
+	Redaction *RedactionConfig `json:"redaction,omitempty" yaml:"redaction,omitempty" toml:"redaction,omitempty" mapstructure:"redaction"`
 }
 
 // DefaultConfig returns a complete, usable default configuration.
@@ -86,6 +90,9 @@ func (p *ConfigPatch) Resolve() (*Config, error) {
 	}
 	if p.ColorEnabled != nil {
 		cfg.ColorEnabled = *p.ColorEnabled
+	}
+	if p.Redaction != nil {
+		cfg.Redaction = *p.Redaction
 	}
 
 	cfg = cfg.normalizedCopy()
@@ -145,7 +152,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	return nil
+	return validateRedactionConfig(c.Redaction)
 }
 
 // Merge retains legacy partial-merge behavior for source compatibility.
@@ -176,6 +183,8 @@ func (c *Config) Merge(other *Config) *Config {
 	c.AddStacktrace = other.AddStacktrace
 	c.Development = other.Development
 	c.ColorEnabled = other.ColorEnabled
+	c.Redaction = other.Redaction
+	c.Redaction.Keys = slices.Clone(other.Redaction.Keys)
 
 	return c
 }
@@ -189,6 +198,7 @@ func (c *Config) normalizedCopy() *Config {
 	cloned.Level = strings.ToLower(c.Level)
 	cloned.Format = strings.ToLower(c.Format)
 	cloned.Outputs = slices.Clone(c.Outputs)
+	cloned.Redaction.Keys = slices.Clone(c.Redaction.Keys)
 	for i := range cloned.Outputs {
 		cloned.Outputs[i] = strings.ToLower(cloned.Outputs[i])
 	}

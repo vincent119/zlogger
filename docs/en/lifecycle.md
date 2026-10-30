@@ -76,6 +76,10 @@ Regular instances require a separate Sync call.
 The core chooses encoding and output. Only Level, AddCaller, AddStacktrace, and Development
 affect its logger, though every patch field still goes through Resolve validation.
 
+Enabled high-level Redaction is rejected with `ErrInvalidConfig` so callers don't mistake
+an external core for a protected one. Build redaction explicitly with `NewRedactingCore`,
+then pass a nil or disabled high-level policy.
+
 External sinks remain yours.
 If ConfigureCore's cleanup should also release those resources, register a
 `WithCoreCleanup(func() error)` callback and let the same shutdown path handle both sync
@@ -92,6 +96,11 @@ There is no Instance constructor for an arbitrary custom core.
 Outputs is validated but doesn't select the output destinations.
 
 ## Redaction and failure observers
+
+Regular and daily split constructors accept `Config.Redaction` or `ConfigPatch.Redaction`.
+They validate the policy before creating files or workers. Redaction adds no resources
+and preserves the existing Sync, Close, and cleanup order. Split constructors can also
+use `WithOutputObserver`; redaction rejection doesn't produce a sink-failure event.
 
 `NewRedactingCore` needs an encoder with no pre-bound fields.
 It builds its own core, keeps sink ownership with the caller, and starts no background work.

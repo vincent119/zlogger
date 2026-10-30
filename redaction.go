@@ -14,8 +14,8 @@ var ErrRedactionFailed = errors.New("log redaction failed")
 
 // RedactionConfig sets the construction-time policy. It defaults to disabled. Later changes do not affect existing cores.
 type RedactionConfig struct {
-	Enabled bool     `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
-	Keys    []string `json:"keys" yaml:"keys" mapstructure:"keys"`
+	Enabled bool     `json:"enabled" yaml:"enabled" toml:"enabled" mapstructure:"enabled"`
+	Keys    []string `json:"keys" yaml:"keys" toml:"keys" mapstructure:"keys"`
 }
 
 // NewRedactingCore creates a core that intercepts sensitive fields before With evaluates them.
@@ -26,20 +26,38 @@ func NewRedactingCore(encoder zapcore.Encoder, sink zapcore.WriteSyncer, level z
 	if encoder == nil || sink == nil || level == nil {
 		return nil, fmt.Errorf("%w: encoder, sink, and level must not be nil", ErrInvalidConfig)
 	}
-	if !cfg.Enabled {
-		return zapcore.NewCore(encoder, sink, level), nil
+	if err := validateRedactionConfig(cfg); err != nil {
+		return nil, err
 	}
-	if len(cfg.Keys) == 0 || len(cfg.Keys) > 128 {
-		return nil, fmt.Errorf("%w: redaction requires 1 to 128 keys", ErrInvalidConfig)
+	return newValidatedRedactingCore(encoder, sink, level, cfg), nil
+}
+
+// newValidatedRedactingCore is used only after validating the policy and constructing valid components.
+// Keeping validation before resource acquisition prevents an invalid policy from creating files or workers.
+func newValidatedRedactingCore(encoder zapcore.Encoder, sink zapcore.WriteSyncer, level zapcore.LevelEnabler, cfg RedactionConfig) zapcore.Core {
+	if !cfg.Enabled {
+		return zapcore.NewCore(encoder, sink, level)
 	}
 	keys := make(map[string]struct{}, len(cfg.Keys))
 	for _, key := range cfg.Keys {
-		if len(key) == 0 || len(key) > 128 {
-			return nil, fmt.Errorf("%w: redaction key length must be between 1 and 128 bytes", ErrInvalidConfig)
-		}
 		keys[redactionKey(key)] = struct{}{}
 	}
-	return &redactingCore{Core: zapcore.NewCore(encoder, sink, level), context: redactionObject{keys: keys}}, nil
+	return &redactingCore{Core: zapcore.NewCore(encoder, sink, level), context: redactionObject{keys: keys}}
+}
+
+func validateRedactionConfig(cfg RedactionConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if len(cfg.Keys) == 0 || len(cfg.Keys) > 128 {
+		return fmt.Errorf("%w: redaction requires 1 to 128 keys", ErrInvalidConfig)
+	}
+	for _, key := range cfg.Keys {
+		if len(key) == 0 || len(key) > 128 {
+			return fmt.Errorf("%w: redaction key length must be between 1 and 128 bytes", ErrInvalidConfig)
+		}
+	}
+	return nil
 }
 
 func redactionKey(key string) string {

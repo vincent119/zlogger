@@ -87,6 +87,7 @@ func (i *Instance) SetLevel(level string) error {
 // NewSplit creates a non-global Instance owning three daily files. A nil cfg uses defaults.
 // Outputs does not select sinks but must pass Validate. LogPath/FileName specify directory/prefix.
 // Close syncs before closing owned outputs. Use a distinct directory or prefix for each Instance.
+// cfg.Redaction applies to all three outputs and is fixed at construction.
 func NewSplit(cfg *Config, opts ...FileOutputOption) (*Instance, error) {
 	if cfg == nil {
 		cfg = DefaultConfig()
@@ -108,7 +109,7 @@ func newSplitInstance(cfg *Config, opts ...FileOutputOption) (*Instance, error) 
 		return nil, err
 	}
 	level := zap.NewAtomicLevelAt(parseLevel(cfg.Level))
-	core := splitCoreForOutput(newEncoder(cfg.Format, buildEncoderConfig(cfg)), output)
+	core := splitCoreForOutputWithRedaction(newEncoder(cfg.Format, buildEncoderConfig(cfg)), output, cfg.Redaction)
 	logger := configuredCoreLogger(core, cfg, level, 0)
 	return &Instance{
 		logger:  logger,
@@ -180,6 +181,7 @@ func (i *Instance) Close() error {
 
 // New creates a logger Instance without modifying global state.
 // A nil Config uses DefaultConfig.
+// cfg.Redaction applies to every configured output and defaults to disabled.
 func New(cfg *Config) (*Instance, error) {
 	return NewWithOptions(cfg)
 }
@@ -340,10 +342,14 @@ func WithCoreCleanup(cleanup func() error) CoreOption {
 // The core controls encoding and outputs. Settings are resolved, but only Level and logger options affect the core.
 // Cleanup syncs before invoking the registered callback. It does not close external sinks automatically.
 // SetLevel intersects with the core's filter and cannot enable levels the core rejects.
+// Enabled ConfigPatch.Redaction is rejected; construct redaction explicitly with NewRedactingCore.
 func ConfigureCore(patch *ConfigPatch, core zapcore.Core, opts ...CoreOption) (func() error, error) {
 	cfg, err := patch.Resolve()
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Redaction.Enabled {
+		return nil, fmt.Errorf("%w: ConfigureCore requires explicit redaction through NewRedactingCore", ErrInvalidConfig)
 	}
 	settings := coreSettings{}
 	for _, option := range opts {
@@ -454,7 +460,7 @@ func buildEncoderConfig(cfg *Config) zapcore.EncoderConfig {
 
 func newConsoleCore(cfg *Config, encoderConfig zapcore.EncoderConfig, level zap.AtomicLevel) zapcore.Core {
 	encoder := newEncoder(cfg.Format, encoderConfig)
-	return zapcore.NewCore(encoder, zapcore.Lock(os.Stdout), level)
+	return newValidatedRedactingCore(encoder, zapcore.Lock(os.Stdout), level, cfg.Redaction)
 }
 
 func newFileCore(
@@ -496,7 +502,7 @@ func newFileCoreWithSettings(
 	logFile := logFiles[0]
 
 	encoder := newEncoder(cfg.Format, encoderConfig)
-	return zapcore.NewCore(encoder, zapcore.Lock(logFile), level), logFile, nil
+	return newValidatedRedactingCore(encoder, zapcore.Lock(logFile), level, cfg.Redaction), logFile, nil
 }
 
 func newEncoder(format string, encoderConfig zapcore.EncoderConfig) zapcore.Encoder {

@@ -23,6 +23,12 @@ handle size-based rotation, retention, and compression.
 `GetSplitCore` and `GetSplitCoreWithOptions` remain available, but their legacy `func()`
 discards Close errors. `GetSplitCoreWithCleanup` neither syncs automatically nor sets globals.
 
+The `New`/`Configure` families and `NewSplit`/`ConfigureSplit` accept redaction through
+`Config.Redaction` or `ConfigPatch.Redaction`. It defaults to disabled and covers every
+regular output sink or all three split files without changing routing or cleanup.
+Low-level core and SplitOutput constructors don't read this setting; assemble custom
+redaction with `NewRedactingCore`. See [security](security.md) for examples and limits.
+
 ## Three daily files
 
 The info file receives DEBUG and INFO, warn receives WARN, and error receives ERROR,

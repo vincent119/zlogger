@@ -56,6 +56,11 @@ func NewSplitCore(encoder zapcore.Encoder, sinks SplitSinks) (zapcore.Core, erro
 }
 
 func buildSplitCore(encoder zapcore.Encoder, sinks SplitSinks) zapcore.Core {
+	return buildSplitCoreWithRedaction(encoder, sinks, RedactionConfig{})
+}
+
+// The high-level caller validates the policy before opening any split output.
+func buildSplitCoreWithRedaction(encoder zapcore.Encoder, sinks SplitSinks, cfg RedactionConfig) zapcore.Core {
 	infoLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
 		return level == zapcore.DebugLevel || level == zapcore.InfoLevel
 	})
@@ -67,9 +72,9 @@ func buildSplitCore(encoder zapcore.Encoder, sinks SplitSinks) zapcore.Core {
 	})
 
 	return zapcore.NewTee(
-		zapcore.NewCore(encoder.Clone(), sinks.Info, infoLevel),
-		zapcore.NewCore(encoder.Clone(), sinks.Warn, warnLevel),
-		zapcore.NewCore(encoder.Clone(), sinks.Error, errorLevel),
+		newValidatedRedactingCore(encoder.Clone(), sinks.Info, infoLevel, cfg),
+		newValidatedRedactingCore(encoder.Clone(), sinks.Warn, warnLevel, cfg),
+		newValidatedRedactingCore(encoder.Clone(), sinks.Error, errorLevel, cfg),
 	)
 }
 
@@ -524,12 +529,16 @@ func GetSplitCoreWithCleanup(
 }
 
 func splitCoreForOutput(encoder zapcore.Encoder, splitOut *SplitOutput) zapcore.Core {
+	return splitCoreForOutputWithRedaction(encoder, splitOut, RedactionConfig{})
+}
+
+func splitCoreForOutputWithRedaction(encoder zapcore.Encoder, splitOut *SplitOutput, cfg RedactionConfig) zapcore.Core {
 	infoOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.InfoLevel})
 	warnOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.WarnLevel})
 	errorOut := zapcore.AddSync(&splitOutputWrapper{so: splitOut, lvl: zapcore.ErrorLevel})
-	return buildSplitCore(encoder, SplitSinks{
+	return buildSplitCoreWithRedaction(encoder, SplitSinks{
 		Info:  infoOut,
 		Warn:  warnOut,
 		Error: errorOut,
-	})
+	}, cfg)
 }

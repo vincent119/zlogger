@@ -23,8 +23,55 @@ zlogger.Info("authentication request",
 
 ## 依欄位名稱自動遮罩
 
+一般與每日三檔高階入口都能設定遮罩，預設關閉。
+`New`／`NewWithOptions`／`NewSplit` 使用 `Config.Redaction`；
+`Configure`／`ConfigureWithOptions`／`ConfigureSplit` 使用 `ConfigPatch.Redaction`。
+明確設定 `Enabled: true` 與 `Keys` 後，不必直接引用 zap 或 zapcore。
+
+以下函式將 token 遮罩後寫入單一檔案，保留 request_id，並回傳同步或關閉錯誤。
+
+```go
+package example
+
+import (
+	"errors"
+
+	"github.com/vincent119/zlogger"
+)
+
+func WriteMaskedLog(directory string) (err error) {
+	cfg := zlogger.DefaultConfig()
+	cfg.Format, cfg.Outputs = "json", []string{"file"}
+	cfg.LogPath, cfg.FileName = directory, "app.log"
+	cfg.Redaction = zlogger.RedactionConfig{
+		Enabled: true,
+		Keys:    []string{"token", "password"},
+	}
+	instance, err := zlogger.New(cfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = errors.Join(err, instance.Sync(), instance.Close())
+	}()
+	instance.Logger().Info("authentication request",
+		zlogger.String("token", "example value"),
+		zlogger.String("request_id", "req-123"),
+	)
+	return nil
+}
+```
+
+輸出的 token 為 `[REDACTED]`。要改成每日三檔，以相同 cfg 呼叫 `NewSplit(cfg)`；
+此時 FileName 作為前綴，Close 自動同步、停止換檔並關檔。
+全域入口的設定方式見[設定](configuration.md#遮罩設定)，清理方式見[生命週期](lifecycle.md)。
+一般及 split 建構會在開檔、啟動 worker 前驗證政策，初始化日誌也使用相同遮罩規則。
+
+### 自訂 encoder 或 sink
+
 `NewRedactingCore(encoder, sink, level, cfg)` 自行建立 core，預設不啟用遮罩。
-要開啟時，明確提供 `Enabled: true` 和 `Keys`。一般與 split 建構入口不會自動套用這個設定。
+要開啟時，明確提供 `Enabled: true` 和 `Keys`。
+低階入口適合自行組裝輸出的情況；不取得 sink 所有權。
 
 以下是完整範例，輸出中的 token 會變成 `[REDACTED]`，request_id 保留原值。
 
@@ -72,6 +119,8 @@ func run() error {
 這個範例寫到標準輸出，不關閉 os.Stdout。換成檔案或其他 sink 時，
 請依[生命週期](lifecycle.md)同步並關閉自己持有的資源。
 也可以將 core 傳入 `ConfigureCore`，使用 zlogger 全域 API。
+此時 ConfigPatch.Redaction 須為 nil 或停用；傳入 Enabled=true 會回傳 ErrInvalidConfig，
+不會包裝既有 core，也不會執行清理 callback。
 
 ### 規則在建構時固定
 
