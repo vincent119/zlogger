@@ -12,6 +12,23 @@ This document records user-visible changes in each zlogger release. Its format f
 
 There are no recorded changes yet.
 
+## [1.2.1] - 2026-10-30
+
+### Added
+
+- Added `Config.Redaction` and `ConfigPatch.Redaction` so regular and daily three-file constructors accept `Enabled` and `Keys` without requiring applications to assemble zapcore components. Redaction defaults to disabled and, when enabled, covers all outputs and initialization logs.
+- Validated redaction policies before opening files or starting workers and copied Keys at construction. Later changes to the source configuration do not affect existing loggers. Routing, rotation, failure observation, and cleanup contracts remain unchanged.
+
+### Changed
+
+- Expanded bilingual documentation and executable examples with high-level redaction configuration, cleanup, and limitations.
+
+### Compatibility notes
+
+- A non-nil `ConfigPatch.Redaction` replaces the whole policy rather than merging individual keys. `ConfigureCore` rejects `Redaction.Enabled=true` with `ErrInvalidConfig`; construct external cores with `NewRedactingCore`, then pass a nil or disabled high-level policy.
+- Callers using unkeyed `Config` or `ConfigPatch` literals must switch to named fields. Existing function signatures and default behavior remain unchanged.
+- The policy is fixed at construction and does not protect free-text messages. When enabled, opaque values such as Error, Reflect, and Stringer remain fully masked.
+
 ## [1.2.0] - 2026-10-16
 
 ### Added
@@ -129,7 +146,8 @@ The following existing fixed messages changed relative to `v1.1.0`:
 
 <!-- markdownlint-enable MD024 -->
 
-[Unreleased]: https://github.com/vincent119/zlogger/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/vincent119/zlogger/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/vincent119/zlogger/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/vincent119/zlogger/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vincent119/zlogger/compare/v1.0.5...v1.1.0
 [1.0.5]: https://github.com/vincent119/zlogger/compare/v1.0.4...v1.0.5
