@@ -196,13 +196,54 @@ func TestHighLevelRedactionStandard(t *testing.T) {
 							}
 							data := readHighLevelFile(t, path)
 							assertHighLevelEntries(t, data, enabled)
-							if !strings.Contains(string(data), "logger initialized") || strings.Contains(string(data), cfg.LogPath) == enabled {
+							wantPath := cfg.LogPath
+							if enabled {
+								wantPath = "[REDACTED]"
+							}
+							gotPath, err := initializationPath(data)
+							if err != nil || gotPath != wantPath || !strings.Contains(string(data), "logger initialized") {
 								t.Fatalf("initialization must use the same policy: %s", data)
 							}
 						}
 					})
 				}
 			}
+		}
+	}
+}
+
+// Both encoders serialize structured fields as JSON; decode before comparing OS-specific paths.
+func initializationPath(data []byte) (string, error) {
+	line := bytes.SplitN(data, []byte("\n"), 2)[0]
+	start := bytes.IndexByte(line, '{')
+	if start < 0 {
+		return "", errors.New("missing initialization fields")
+	}
+	var fields struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(line[start:], &fields); err != nil {
+		return "", err
+	}
+	return fields.Path, nil
+}
+
+func TestInitializationPath(t *testing.T) {
+	for _, path := range []string{`C:\Users\runner\Temp\logs`, `/tmp/logs`, `C:\logs\"quoted"`, "[REDACTED]"} {
+		encoded, err := json.Marshal(map[string]string{"path": path})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, prefix := range []string{"", "2026-10-30 INFO logger initialized "} {
+			got, err := initializationPath([]byte(prefix + string(encoded) + "\n{\"path\":\"later\"}\n"))
+			if err != nil || got != path {
+				t.Fatalf("path=%q got=%q error=%v", path, got, err)
+			}
+		}
+	}
+	for _, data := range []string{"", "missing fields", "{invalid}"} {
+		if _, err := initializationPath([]byte(data)); err == nil {
+			t.Fatalf("expected invalid record: %q", data)
 		}
 	}
 }
