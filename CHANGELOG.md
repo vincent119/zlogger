@@ -12,6 +12,23 @@
 
 目前沒有已記錄的變更。
 
+## [1.2.1] - 2026-10-30
+
+### 新增
+
+- 新增 `Config.Redaction` 與 `ConfigPatch.Redaction`，讓一般及每日三檔建構入口直接設定 `Enabled` 與 `Keys`，不必自行組裝 zapcore。遮罩預設關閉，啟用時涵蓋所有輸出及初始化日誌。
+- 遮罩設定在開檔或啟動 worker 前完成驗證，並在建構時複製 Keys；後續修改來源設定不影響既有 logger。分級、換檔、故障通知與清理契約維持不變。
+
+### 變更
+
+- 中英文文件與可執行範例補齊高階遮罩設定、清理方式與適用限制。
+
+### 相容性注意事項
+
+- `ConfigPatch.Redaction` 非 nil 時整組取代政策，不逐 key 合併。`ConfigureCore` 拒絕 `Redaction.Enabled=true` 並回傳 `ErrInvalidConfig`；外部 core 請先以 `NewRedactingCore` 組裝，再搭配 nil 或停用的高階設定。
+- 使用非具名 `Config` 或 `ConfigPatch` literal 的呼叫端，需改為具名欄位。既有函式簽名與預設行為不變。
+- 遮罩政策在建構時固定，不處理自由文字 message；啟用時 Error、Reflect、Stringer 等 opaque 值仍會整欄遮罩。
+
 ## [1.2.0] - 2026-10-16
 
 ### 新增
@@ -129,7 +146,8 @@
 
 <!-- markdownlint-enable MD024 -->
 
-[未發布]: https://github.com/vincent119/zlogger/compare/v1.2.0...HEAD
+[未發布]: https://github.com/vincent119/zlogger/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/vincent119/zlogger/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/vincent119/zlogger/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vincent119/zlogger/compare/v1.0.5...v1.1.0
 [1.0.5]: https://github.com/vincent119/zlogger/compare/v1.0.4...v1.0.5
